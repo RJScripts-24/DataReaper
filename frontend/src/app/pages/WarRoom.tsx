@@ -2,6 +2,21 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import { MessageSquare, Clock, AlertCircle } from "lucide-react";
+import { PressureFilter } from "../components/PressureFilter";
+import { PressureText } from "../components/PressureText";
+
+const COLORS = {
+  bg: "#f5f3ef",
+  card: "#f1eee8",
+  paper: "#fdfbf7",
+  blue: "#4a6fa5",
+  orange: "#d17a22",
+  red: "#b94a48",
+  green: "#4f7d5c",
+  purple: "#7b6fb5",
+  text: "#1f1f1f",
+  textSec: "#5a5a5a",
+};
 
 interface Message {
   id: string;
@@ -23,6 +38,9 @@ interface Target {
   messageCount: number;
   conversation: Message[];
 }
+
+// ... targets array remains ...
+
 
 const targets: Target[] = [
   {
@@ -273,15 +291,15 @@ export default function WarRoom() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "resolved":
-        return "#4FD1C5";
+        return COLORS.green;
       case "stalling":
-        return "#FF9F43";
+        return COLORS.orange;
       case "illegal":
-        return "#FF6B6B";
+        return COLORS.red;
       case "in-progress":
-        return "#4A90E2";
+        return COLORS.blue;
       default:
-        return "#717182";
+        return COLORS.textSec;
     }
   };
 
@@ -302,143 +320,127 @@ export default function WarRoom() {
 
   return (
     <div
-      className="min-h-screen"
-      style={{ backgroundColor: "#F7F7FB", fontFamily: "Inter, sans-serif" }}
+      className="min-h-screen relative w-full overflow-x-hidden"
+      style={{ backgroundColor: COLORS.bg }}
     >
+      <PressureFilter />
+
       {/* Navbar */}
       <nav
-        className="sticky top-0 z-50 backdrop-blur-md border-b"
-        style={{
-          backgroundColor: "rgba(255, 255, 255, 0.9)",
-          borderColor: "rgba(0, 0, 0, 0.1)",
-        }}
+        className="sticky top-0 z-50 pt-4 pb-3 px-6 md:px-12 lg:px-16 flex items-center justify-between backdrop-blur-sm"
+        style={{ backgroundColor: "rgba(245, 243, 239, 0.8)", borderBottom: "1.5px dashed rgba(0,0,0,0.15)" }}
       >
-        <div className="max-w-[1600px] mx-auto px-32 py-4 flex items-center justify-between">
-          <span
-            className="text-xl tracking-tight cursor-pointer"
-            style={{ fontFamily: "'Playfair Display', serif", color: "#0B0F1A" }}
+        <div className="max-w-[1600px] w-full mx-auto flex items-center justify-between">
+          <PressureText
+            as="span"
+            className="text-3xl tracking-tight cursor-pointer"
+            style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}
             onClick={() => navigate("/")}
           >
             DataReaper
-          </span>
+          </PressureText>
 
-          <div className="flex items-center gap-8">
-            <button
-              onClick={() => navigate("/command-center")}
-              className="text-sm hover:text-[#6C63FF] transition-colors"
-              style={{ color: "#717182" }}
-            >
-              Dashboard
-            </button>
-            <button className="text-sm transition-colors" style={{ color: "#0B0F1A" }}>
-              War Room
-            </button>
-            <button
-              onClick={() => navigate("/identity-graph")}
-              className="text-sm hover:text-[#6C63FF] transition-colors"
-              style={{ color: "#717182" }}
-            >
-              Identity Graph
-            </button>
-            <button className="text-sm hover:text-[#6C63FF] transition-colors" style={{ color: "#717182" }}>
-              Reports
-            </button>
+          <div className="hidden md:flex items-center gap-8">
+            <button onClick={() => navigate("/command-center")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Dashboard</button>
+            <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70">War Room</button>
+            <button onClick={() => navigate("/identity-graph")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Identity Graph</button>
+            <button className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Reports</button>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <motion.div
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: "#FF6B6B" }}
-                animate={{ opacity: [1, 0.5, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: COLORS.red, boxShadow: `0 0 8px ${COLORS.red}44` }}
+                animate={{ opacity: [1, 0.4, 1], scale: [1, 1.2, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
               />
-              <span className="text-sm" style={{ color: "#FF6B6B" }}>
-                Active Engagement
-              </span>
+              <PressureText as="span" className="text-xl" style={{ color: COLORS.red, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>Active Engagement</PressureText>
             </div>
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: "#6C63FF" }}
+              className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-[#1a1a1a] shadow-sm cursor-pointer"
+              style={{ filter: "url(#pencil-sketch)", backgroundColor: "#e2e8f0" }}
             >
-              <span className="text-white text-sm">U</span>
+              <span className="pencil-heading text-lg font-bold">U</span>
             </div>
           </div>
         </div>
       </nav>
 
       {/* Main Split Screen */}
-      <div className="flex h-[calc(100vh-73px)] max-w-[1600px] mx-auto">
+      <div className="flex h-[calc(100vh-73px)] max-w-[1600px] mx-auto p-4 gap-6">
         {/* Left Pane - Active Targets */}
         <div
-          className="w-[30%] border-r overflow-y-auto"
-          style={{
-            backgroundColor: "#FFFFFF",
-            borderColor: "rgba(0, 0, 0, 0.1)",
-          }}
+          className="w-[30%] hand-drawn-card overflow-hidden flex flex-col"
         >
-          <div className="p-6 border-b sticky top-0 bg-white z-10" style={{ borderColor: "rgba(0, 0, 0, 0.1)" }}>
-            <h2
-              className="text-2xl mb-2"
-              style={{ fontFamily: "'Playfair Display', serif", color: "#0B0F1A" }}
+          <div className="p-6 border-b z-10" style={{ borderBottom: "2px solid #2b2b2b", filter: "url(#pencil-sketch)" }}>
+            <PressureText
+              as="h2"
+              variant="strong"
+              className="paper-text text-3xl mb-1"
+              style={{ fontFamily: "'Caveat', cursive" }}
             >
               Active Engagements
-            </h2>
-            <p className="text-sm" style={{ color: "#717182" }}>
-              Monitoring legal disputes across data brokers
-            </p>
+            </PressureText>
+            <PressureText as="p" variant="lite" className="paper-text text-lg opacity-80" style={{ fontFamily: "'Patrick Hand', cursive" }}>
+              Monitoring legal disputes
+            </PressureText>
           </div>
 
-          <div className="p-4 space-y-3">
+          <div className="p-4 space-y-4 overflow-y-auto flex-1">
             {targets.map((target) => (
               <motion.div
                 key={target.id}
                 onClick={() => setSelectedTarget(target)}
-                whileHover={{ scale: 1.02 }}
-                className="p-4 rounded-xl cursor-pointer border-2 transition-all shadow-sm"
-                style={{
-                  backgroundColor: selectedTarget.id === target.id ? "rgba(108, 99, 255, 0.05)" : "#FFFFFF",
-                  borderColor:
-                    selectedTarget.id === target.id
-                      ? "rgba(108, 99, 255, 0.4)"
-                      : "rgba(0, 0, 0, 0.1)",
-                  boxShadow:
-                    selectedTarget.id === target.id
-                      ? "0 0 20px rgba(108, 99, 255, 0.2)"
-                      : "0 1px 3px rgba(0, 0, 0, 0.05)",
-                }}
+                whileHover={{ scale: 1.01, rotate: 0.5 }}
+                className="p-4 cursor-pointer relative"
               >
-                <div className="flex items-start justify-between mb-3">
+                {/* Custom sketchy border for selection */}
+                <div 
+                  className="absolute inset-0 border-2 border-transparent transition-colors"
+                  style={{ 
+                    borderColor: selectedTarget.id === target.id ? "#2b2b2b" : "transparent",
+                    borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
+                    filter: selectedTarget.id === target.id ? "url(#pencil-sketch-heavy)" : "none",
+                    backgroundColor: selectedTarget.id === target.id ? "rgba(123, 111, 181, 0.05)" : "transparent"
+                  }}
+                />
+
+                <div className="relative z-10 flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="text-base mb-1" style={{ color: "#0B0F1A" }}>
+                    <PressureText as="h3" variant="strong" className="paper-text text-xl mb-1" style={{ fontFamily: "'Patrick Hand', cursive" }}>
                       {target.brokerName}
-                    </h3>
-                    <div
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
-                      style={{
-                        backgroundColor: `${getStatusColor(target.status)}20`,
-                        color: getStatusColor(target.status),
-                      }}
-                    >
+                    </PressureText>
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 relative">
+                       <div 
+                         className="absolute inset-0 opacity-20"
+                         style={{
+                           backgroundColor: getStatusColor(target.status),
+                           borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
+                           filter: "url(#pencil-sketch)"
+                         }}
+                       />
                       <motion.div
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: getStatusColor(target.status) }}
-                        animate={{ opacity: [1, 0.5, 1] }}
+                        className="w-1.5 h-1.5 rounded-full relative z-10"
+                        style={{ backgroundColor: getStatusColor(target.status), filter: "url(#pencil-sketch)" }}
+                        animate={{ opacity: [1, 0.5, 1], scale: [1, 1.2, 1] }}
                         transition={{ duration: 2, repeat: Infinity }}
                       />
-                      {getStatusLabel(target.status)}
+                      <span className="text-sm font-bold relative z-10" style={{ color: getStatusColor(target.status), fontFamily: "'Caveat', cursive" }}>
+                        {getStatusLabel(target.status)}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs" style={{ color: "#717182" }}>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
+                <div className="relative z-10 flex items-center justify-between text-sm opacity-70" style={{ fontFamily: "'Patrick Hand', cursive" }}>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" style={{ filter: "url(#pencil-sketch)" }} />
                     {target.lastActivity}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <MessageSquare className="w-3 h-3" />
-                    {target.messageCount} messages
+                  <div className="flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5" style={{ filter: "url(#pencil-sketch)" }} />
+                    {target.messageCount} msgs
                   </div>
                 </div>
               </motion.div>
@@ -447,72 +449,71 @@ export default function WarRoom() {
         </div>
 
         {/* Right Pane - Battle Viewer */}
-        <div className="flex-1 flex flex-col" style={{ backgroundColor: "#F7F7FB" }}>
+        <div className="flex-1 flex flex-col hand-drawn-card overflow-hidden">
           {/* Conversation Header */}
           <div
             className="p-6 border-b"
             style={{
-              backgroundColor: "#FFFFFF",
-              borderColor: "rgba(0, 0, 0, 0.1)",
+              borderBottom: "2px solid #2b2b2b",
+              filter: "url(#pencil-sketch)"
             }}
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2
-                  className="text-2xl mb-1"
-                  style={{ fontFamily: "'Playfair Display', serif", color: "#0B0F1A" }}
+                <PressureText
+                  as="h2"
+                  variant="strong"
+                  className="paper-text text-4xl mb-1"
+                  style={{ fontFamily: "'Dancing Script', cursive" }}
                 >
                   {selectedTarget.brokerName}
-                </h2>
+                </PressureText>
                 <div className="flex items-center gap-3">
-                  <div
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs"
-                    style={{
-                      backgroundColor: `${getStatusColor(selectedTarget.status)}20`,
-                      color: getStatusColor(selectedTarget.status),
-                    }}
-                  >
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 relative">
+                       <div 
+                         className="absolute inset-0 opacity-20"
+                         style={{
+                           backgroundColor: getStatusColor(selectedTarget.status),
+                           borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
+                           filter: "url(#pencil-sketch)"
+                         }}
+                       />
                     <motion.div
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: getStatusColor(selectedTarget.status) }}
-                      animate={{ opacity: [1, 0.5, 1] }}
+                      className="w-2 h-2 rounded-full relative z-10"
+                      style={{ backgroundColor: getStatusColor(selectedTarget.status), filter: "url(#pencil-sketch)" }}
+                      animate={{ opacity: [1, 0.5, 1], scale: [1, 1.2, 1] }}
                       transition={{ duration: 2, repeat: Infinity }}
                     />
-                    {getStatusLabel(selectedTarget.status)}
+                    <span className="text-base font-bold relative z-10" style={{ color: getStatusColor(selectedTarget.status), fontFamily: "'Caveat', cursive" }}>
+                      {getStatusLabel(selectedTarget.status)}
+                    </span>
                   </div>
-                  <span className="text-xs" style={{ color: "#717182" }}>
+                  <span className="text-base opacity-70" style={{ fontFamily: "'Patrick Hand', cursive" }}>
                     Last activity: {selectedTarget.lastActivity}
                   </span>
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-4">
                 <button
                   onClick={() => navigate("/identity-graph")}
-                  className="px-3 py-1.5 rounded-lg text-xs hover:bg-[rgba(108,99,255,0.1)] transition-colors"
-                  style={{ color: "#6C63FF", border: "1px solid rgba(108, 99, 255, 0.3)" }}
+                  className="px-4 py-2 text-lg hand-drawn-button"
+                  style={{ color: COLORS.blue }}
                 >
-                  View in Graph
-                </button>
-                <button
-                  onClick={() => navigate("/command-center")}
-                  className="px-3 py-1.5 rounded-lg text-xs hover:bg-[rgba(108,99,255,0.1)] transition-colors"
-                  style={{ color: "#6C63FF", border: "1px solid rgba(108, 99, 255, 0.3)" }}
-                >
-                  Return to Dashboard
+                  <PressureText className="paper-text">View Graph</PressureText>
                 </button>
               </div>
             </div>
           </div>
 
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto p-8 space-y-6">
             <AnimatePresence>
               {selectedTarget.conversation.map((message, index) => (
                 <motion.div
                   key={message.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0, y: 10, rotate: index % 2 === 0 ? -0.5 : 0.5 }}
+                  animate={{ opacity: 1, y: 0, rotate: index % 2 === 0 ? -0.5 : 0.5 }}
                   transition={{ delay: index * 0.05 }}
                 >
                   {message.type === "system" ? (
@@ -531,30 +532,20 @@ export default function WarRoom() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex justify-end"
+                className="flex justify-end mt-4"
               >
                 <div
-                  className="px-4 py-3 rounded-2xl max-w-[70%]"
+                  className="px-5 py-3 border-2 border-[#2b2b2b]"
                   style={{
-                    background: "linear-gradient(135deg, #6C63FF 0%, #8B85FF 100%)",
+                    backgroundColor: "rgba(123, 111, 181, 0.15)",
+                    borderRadius: "15px 225px 15px 255px / 255px 15px 225px 15px",
+                    filter: "url(#pencil-sketch)"
                   }}
                 >
-                  <div className="flex gap-1">
-                    <motion.div
-                      className="w-2 h-2 rounded-full bg-white"
-                      animate={{ opacity: [0.3, 1, 0.3] }}
-                      transition={{ duration: 1.5, repeat: Infinity, delay: 0 }}
-                    />
-                    <motion.div
-                      className="w-2 h-2 rounded-full bg-white"
-                      animate={{ opacity: [0.3, 1, 0.3] }}
-                      transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
-                    />
-                    <motion.div
-                      className="w-2 h-2 rounded-full bg-white"
-                      animate={{ opacity: [0.3, 1, 0.3] }}
-                      transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
-                    />
+                  <div className="flex gap-2">
+                    <motion.div className="w-2.5 h-2.5 rounded-full bg-[#2b2b2b]" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0 }} />
+                    <motion.div className="w-2.5 h-2.5 rounded-full bg-[#2b2b2b]" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }} />
+                    <motion.div className="w-2.5 h-2.5 rounded-full bg-[#2b2b2b]" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }} />
                   </div>
                 </div>
               </motion.div>
@@ -562,6 +553,40 @@ export default function WarRoom() {
           </div>
         </div>
       </div>
+      
+      {/* Required CSS */}
+      <style>{`
+        .hand-drawn-card {
+          border: 2px solid #2b2b2b !important;
+          border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px !important;
+          background-color: #fdfbf7;
+          box-shadow: 8px 8px 0px rgba(0,0,0,0.05) !important;
+          filter: url(#pencil-texture);
+          position: relative;
+        }
+        .hand-drawn-card::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+          pointer-events: none;
+          z-index: -1;
+        }
+        .hand-drawn-button {
+          background-color: transparent;
+          border: 2px solid #2b2b2b;
+          border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+          cursor: pointer;
+          filter: url(#pencil-sketch);
+          transition: transform 0.1s ease-in-out;
+        }
+        .hand-drawn-button:hover {
+          transform: scale(1.02) rotate(-1deg);
+        }
+        .hand-drawn-button:active {
+          transform: scale(0.98);
+        }
+      `}</style>
     </div>
   );
 }

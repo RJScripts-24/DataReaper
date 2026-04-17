@@ -2,6 +2,21 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import { X, Play, Filter, Eye, EyeOff } from "lucide-react";
+import { PressureFilter } from "../components/PressureFilter";
+import { PressureText } from "../components/PressureText";
+
+const COLORS = {
+  bg: "#f5f3ef",
+  card: "#f1eee8",
+  paper: "#fdfbf7",
+  blue: "#4a6fa5",
+  orange: "#d17a22",
+  red: "#b94a48",
+  green: "#4f7d5c",
+  purple: "#7b6fb5",
+  text: "#1f1f1f",
+  textSec: "#5a5a5a",
+};
 
 interface GraphNode {
   id: string;
@@ -27,6 +42,7 @@ export default function IdentityGraph() {
   const [showPlatforms, setShowPlatforms] = useState(true);
   const [showIdentity, setShowIdentity] = useState(true);
   const [showTargets, setShowTargets] = useState(true);
+  const [scale, setScale] = useState(1);
 
   // Define all graph nodes
   const allNodes: GraphNode[] = [
@@ -200,17 +216,17 @@ export default function IdentityGraph() {
   const getNodeColor = (type: string) => {
     switch (type) {
       case "seed":
-        return "#6C63FF";
+        return COLORS.purple;
       case "platform":
-        return "#4A90E2";
+        return COLORS.blue;
       case "username":
-        return "#4FD1C5";
+        return COLORS.green;
       case "identity":
-        return "#717182";
+        return COLORS.orange;
       case "target":
-        return "#FF6B6B";
+        return COLORS.red;
       default:
-        return "#FFFFFF";
+        return COLORS.text;
     }
   };
 
@@ -259,66 +275,48 @@ export default function IdentityGraph() {
 
   return (
     <div
-      className="min-h-screen"
-      style={{ backgroundColor: "#F7F7FB", fontFamily: "Inter, sans-serif" }}
+      className="min-h-screen relative w-full overflow-x-hidden"
+      style={{ backgroundColor: COLORS.bg }}
     >
+      <PressureFilter />
+
       {/* Navbar */}
       <nav
-        className="sticky top-0 z-50 backdrop-blur-md border-b"
-        style={{
-          backgroundColor: "rgba(255, 255, 255, 0.9)",
-          borderColor: "rgba(0, 0, 0, 0.1)",
-        }}
+        className="sticky top-0 z-50 pt-4 pb-3 px-6 md:px-12 lg:px-16 flex items-center justify-between backdrop-blur-sm"
+        style={{ backgroundColor: "rgba(245, 243, 239, 0.8)", borderBottom: "1.5px dashed rgba(0,0,0,0.15)" }}
       >
-        <div className="max-w-[1600px] mx-auto px-32 py-4 flex items-center justify-between">
-          <span
-            className="text-xl tracking-tight cursor-pointer"
-            style={{ fontFamily: "'Playfair Display', serif", color: "#0B0F1A" }}
+        <div className="max-w-[1600px] w-full mx-auto flex items-center justify-between">
+          <PressureText
+            as="span"
+            className="text-3xl tracking-tight cursor-pointer"
+            style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}
             onClick={() => navigate("/")}
           >
             DataReaper
-          </span>
+          </PressureText>
 
-          <div className="flex items-center gap-8">
-            <button
-              onClick={() => navigate("/command-center")}
-              className="text-sm hover:text-[#6C63FF] transition-colors"
-              style={{ color: "#717182" }}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => navigate("/war-room")}
-              className="text-sm hover:text-[#6C63FF] transition-colors"
-              style={{ color: "#717182" }}
-            >
-              War Room
-            </button>
-            <button className="text-sm transition-colors" style={{ color: "#0B0F1A" }}>
-              Identity Graph
-            </button>
-            <button className="text-sm hover:text-[#6C63FF] transition-colors" style={{ color: "#717182" }}>
-              Reports
-            </button>
+          <div className="hidden md:flex items-center gap-8">
+            <button onClick={() => navigate("/command-center")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Dashboard</button>
+            <button onClick={() => navigate("/war-room")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">War Room</button>
+            <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70">Identity Graph</button>
+            <button className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Reports</button>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <motion.div
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: "#4FD1C5" }}
-                animate={{ opacity: [1, 0.5, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: COLORS.green, boxShadow: `0 0 8px ${COLORS.green}44` }}
+                animate={{ opacity: [1, 0.4, 1], scale: [1, 1.2, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
               />
-              <span className="text-sm" style={{ color: "#4FD1C5" }}>
-                Active Scan
-              </span>
+              <PressureText as="span" className="text-xl" style={{ color: COLORS.green, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>Active Scan</PressureText>
             </div>
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: "#6C63FF" }}
+              className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-[#1a1a1a] shadow-sm cursor-pointer"
+              style={{ filter: "url(#pencil-sketch)", backgroundColor: "#e2e8f0" }}
             >
-              <span className="text-white text-sm">U</span>
+              <span className="pencil-heading text-lg font-bold">U</span>
             </div>
           </div>
         </div>
@@ -329,34 +327,34 @@ export default function IdentityGraph() {
         <motion.div
           initial={{ x: -20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          className="w-64 border-r p-6 shadow-lg"
+          className="w-64 p-5 hand-drawn-card"
           style={{
-            backgroundColor: "#FFFFFF",
-            borderColor: "rgba(0, 0, 0, 0.1)",
+            backgroundColor: COLORS.card,
+            borderRight: "1.5px dashed rgba(0,0,0,0.15)",
+            borderRadius: "0",
+            boxShadow: "inset 0 0 20px rgba(0,0,0,0.02), 2px 2px 8px rgba(0,0,0,0.04)",
           }}
         >
-          <h3 className="text-lg mb-6" style={{ color: "#0B0F1A" }}>
+          <PressureText as="h3" className="text-2xl mb-5" style={{ fontFamily: "'Caveat', cursive" }}>
             Graph Controls
-          </h3>
+          </PressureText>
 
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div>
-              <button
+              <motion.button
                 onClick={replayAnimation}
-                className="w-full flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-[rgba(108,99,255,0.2)] transition-colors"
-                style={{
-                  backgroundColor: "rgba(108, 99, 255, 0.1)",
-                  color: "#6C63FF",
-                }}
+                whileHover={{ scale: 1.02, rotate: -0.5 }}
+                whileTap={{ scale: 0.98 }}
+                className="w-full flex items-center justify-center gap-2 py-3 hand-drawn-button text-lg"
               >
                 <Play className="w-4 h-4" />
-                Replay Animation
-              </button>
+                <PressureText className="paper-text">Replay Animation</PressureText>
+              </motion.button>
             </div>
 
             <div>
-              <h4 className="text-sm mb-3" style={{ color: "#717182" }}>
-                <Filter className="w-4 h-4 inline mr-2" />
+              <h4 className="text-base mb-3 flex items-center gap-2" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
+                <Filter className="w-4 h-4" />
                 Filter Nodes
               </h4>
               <div className="space-y-2">
@@ -364,47 +362,48 @@ export default function IdentityGraph() {
                   label="Platforms"
                   enabled={showPlatforms}
                   onToggle={() => setShowPlatforms(!showPlatforms)}
-                  color="#4A90E2"
+                  color={COLORS.blue}
                 />
                 <ToggleButton
                   label="Identity Data"
                   enabled={showIdentity}
                   onToggle={() => setShowIdentity(!showIdentity)}
-                  color="#717182"
+                  color={COLORS.orange}
                 />
                 <ToggleButton
                   label="Data Brokers"
                   enabled={showTargets}
                   onToggle={() => setShowTargets(!showTargets)}
-                  color="#FF6B6B"
+                  color={COLORS.red}
                 />
               </div>
             </div>
 
-            <div className="pt-4 border-t" style={{ borderColor: "rgba(0, 0, 0, 0.1)" }}>
-              <h4 className="text-sm mb-2" style={{ color: "#717182" }}>
+            <div className="pt-4" style={{ borderTop: "1.5px dashed rgba(0,0,0,0.12)" }}>
+              <h4 className="text-base mb-3" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
                 Legend
               </h4>
-              <div className="space-y-2 text-xs">
-                <LegendItem color="#6C63FF" label="Seed Email" />
-                <LegendItem color="#4A90E2" label="Platform" />
-                <LegendItem color="#4FD1C5" label="Username" />
-                <LegendItem color="#717182" label="Identity" />
-                <LegendItem color="#FF6B6B" label="Target Broker" />
+              <div className="space-y-2 text-sm">
+                <LegendItem color={COLORS.purple} label="Seed Email" />
+                <LegendItem color={COLORS.blue} label="Platform" />
+                <LegendItem color={COLORS.green} label="Username" />
+                <LegendItem color={COLORS.orange} label="Identity" />
+                <LegendItem color={COLORS.red} label="Target Broker" />
               </div>
             </div>
           </div>
         </motion.div>
 
         {/* Main Graph Canvas */}
-        <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: "#FFFFFF" }}>
-          {/* Background Grid */}
+        <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: COLORS.paper }}>
+          {/* Paper texture grid */}
           <div
-            className="absolute inset-0 opacity-20"
+            className="absolute inset-0 opacity-15"
             style={{
               backgroundImage:
-                "linear-gradient(rgba(108, 99, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(108, 99, 255, 0.1) 1px, transparent 1px)",
+                "linear-gradient(rgba(74, 111, 165, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(74, 111, 165, 0.08) 1px, transparent 1px)",
               backgroundSize: "50px 50px",
+              filter: "url(#pencil-sketch)",
             }}
           />
 
@@ -412,23 +411,33 @@ export default function IdentityGraph() {
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              background: "radial-gradient(circle at center, transparent 40%, rgba(247, 247, 251, 0.6) 100%)",
+              background: "radial-gradient(circle at center, transparent 40%, rgba(245, 243, 239, 0.7) 100%)",
             }}
           />
 
-          {/* SVG Canvas for edges */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-            <defs>
-              <filter id="glow">
-                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                <feMerge>
-                  <feMergeNode in="coloredBlur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            {/* Draw edges */}
+          {/* Zoomable & Panning Container */}
+          <motion.div
+            drag
+            dragConstraints={{ left: -1000, right: 1000, top: -1000, bottom: 1000 }}
+            className="absolute cursor-grab active:cursor-grabbing"
+            style={{ 
+               width: 800, height: 600,
+               left: "50%", top: "50%",
+               marginLeft: -400, marginTop: -300
+            }}
+            animate={{ scale }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onWheel={(e) => {
+              if (e.deltaY < 0) {
+                setScale(s => Math.min(s + 0.05, 2.5));
+              } else {
+                setScale(s => Math.max(s - 0.05, 0.4));
+              }
+            }}
+          >
+            {/* SVG Canvas for edges */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ filter: "url(#pencil-sketch)" }}>
+              {/* Draw edges */}
             {filteredNodes.map((node) =>
               node.connections
                 .filter((connId) => filteredNodes.find((n) => n.id === connId))
@@ -447,12 +456,12 @@ export default function IdentityGraph() {
                       y1={node.y}
                       x2={targetNode.x}
                       y2={targetNode.y}
-                      stroke={isHighlighted ? getNodeColor(node.type) : "rgba(108, 99, 255, 0.2)"}
-                      strokeWidth={isHighlighted ? 2 : 1}
+                      stroke={getNodeColor(node.type)}
+                      strokeWidth={isHighlighted ? 2.5 : 1.2}
+                      strokeDasharray={isHighlighted ? "none" : "6,4"}
                       initial={{ pathLength: 0, opacity: 0 }}
-                      animate={{ pathLength: 1, opacity: isHighlighted ? 0.8 : 0.4 }}
+                      animate={{ pathLength: 1, opacity: isHighlighted ? 0.9 : 0.35 }}
                       transition={{ duration: 0.5 }}
-                      filter={isHighlighted ? "url(#glow)" : undefined}
                     />
                   );
                 })
@@ -493,17 +502,19 @@ export default function IdentityGraph() {
                       style={{
                         width: size * 2,
                         height: size * 2,
-                        backgroundColor: color,
-                        boxShadow: `0 0 ${size}px ${color}`,
+                        backgroundColor: COLORS.paper,
+                        border: selectedNode?.id === node.id ? `3.5px solid ${color}` : `2.5px solid ${color}`,
+                        filter: "url(#pencil-sketch)",
+                        boxShadow: selectedNode?.id === node.id ? `0 0 12px ${color}80` : "none",
                       }}
                       animate={
                         node.type === "target"
-                          ? { scale: [1, 1.2, 1], opacity: [1, 0.8, 1] }
+                          ? { scale: [1, 1.15, 1] }
                           : {}
                       }
                       transition={
                         node.type === "target"
-                          ? { duration: 2, repeat: Infinity }
+                          ? { duration: 2.5, repeat: Infinity }
                           : {}
                       }
                     >
@@ -511,21 +522,37 @@ export default function IdentityGraph() {
                         <motion.div
                           className="absolute inset-0 rounded-full border-2"
                           style={{ borderColor: color }}
-                          initial={{ scale: 1, opacity: 0.8 }}
-                          animate={{ scale: 2, opacity: 0 }}
-                          transition={{ duration: 2, repeat: Infinity }}
+                          initial={{ scale: 1, opacity: 0.6 }}
+                          animate={{ scale: 2.5, opacity: 0 }}
+                          transition={{ duration: 2.5, repeat: Infinity }}
                         />
                       )}
+                      <motion.div
+                        className="absolute rounded-full"
+                        style={{
+                          width: selectedNode?.id === node.id ? size * 0.9 : size * 0.85,
+                          height: selectedNode?.id === node.id ? size * 0.9 : size * 0.85,
+                          backgroundColor: color,
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%)",
+                          opacity: 1,
+                        }}
+                      />
                     </motion.div>
 
                     {/* Label */}
                     <div
-                      className="absolute top-full mt-2 whitespace-nowrap text-xs text-center"
+                      className="absolute top-full mt-2 whitespace-nowrap text-center"
                       style={{
                         left: "50%",
                         transform: "translateX(-50%)",
-                        color: "#0B0F1A",
-                        textShadow: "0 1px 2px rgba(255, 255, 255, 0.8)",
+                        fontFamily: "'Patrick Hand', cursive",
+                        fontSize: "15px",
+                        fontWeight: "bold",
+                        color: COLORS.text,
+                        opacity: 1,
+                        textShadow: `0 0 6px ${COLORS.paper}, 0 0 6px ${COLORS.paper}, 0 0 6px ${COLORS.paper}`,
                       }}
                     >
                       {node.label}
@@ -535,6 +562,7 @@ export default function IdentityGraph() {
               })}
             </AnimatePresence>
           </div>
+          </motion.div>
 
           {/* Center message */}
           {nodes.length === 0 && (
@@ -542,15 +570,18 @@ export default function IdentityGraph() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-center"
+                className="text-center hand-drawn-card p-8"
+                style={{ backgroundColor: COLORS.paper }}
               >
-                <div
-                  className="text-2xl mb-2"
-                  style={{ fontFamily: "'Playfair Display', serif", color: "#0B0F1A" }}
+                <PressureText
+                  as="div"
+                  variant="strong"
+                  className="text-3xl mb-2 paper-text"
+                  style={{ fontFamily: "'Caveat', cursive" }}
                 >
                   Building Identity Graph...
-                </div>
-                <div className="text-sm" style={{ color: "#717182" }}>
+                </PressureText>
+                <div className="text-lg" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
                   Watch as we reconstruct the digital footprint
                 </div>
               </motion.div>
@@ -565,38 +596,41 @@ export default function IdentityGraph() {
               initial={{ x: 20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 20, opacity: 0 }}
-              className="w-80 border-l p-6 relative"
+              className="w-80 p-5 relative hand-drawn-card"
               style={{
-                backgroundColor: "rgba(15, 22, 41, 0.9)",
-                borderColor: "rgba(255, 255, 255, 0.1)",
+                backgroundColor: COLORS.card,
+                borderLeft: "1.5px dashed rgba(0,0,0,0.15)",
+                borderRadius: "0",
+                boxShadow: "inset 0 0 20px rgba(0,0,0,0.02), -2px 2px 8px rgba(0,0,0,0.04)",
               }}
             >
               <button
                 onClick={() => setSelectedNode(null)}
-                className="absolute top-4 right-4 p-1 rounded hover:bg-[rgba(255,255,255,0.1)] transition-colors"
-                style={{ color: "#A0AEC0" }}
+                className="absolute top-4 right-4 p-1.5 transition-colors"
+                style={{ color: COLORS.textSec, border: "1px solid rgba(0,0,0,0.2)", borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
 
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-4">
+              <div className="mb-5">
+                <div className="flex items-center gap-3 mb-3">
                   <div
-                    className="w-4 h-4 rounded-full"
-                    style={{
-                      backgroundColor: getNodeColor(selectedNode.type),
-                      boxShadow: `0 0 10px ${getNodeColor(selectedNode.type)}`,
-                    }}
-                  />
-                  <h3 className="text-lg" style={{ color: "#FFFFFF" }}>
+                    className="w-4 h-4 rounded-full border-2"
+                    style={{ borderColor: getNodeColor(selectedNode.type), backgroundColor: COLORS.paper, filter: "url(#pencil-sketch)" }}
+                  >
+                    <div className="w-2 h-2 rounded-full m-auto mt-[3px]" style={{ backgroundColor: getNodeColor(selectedNode.type), opacity: 0.7 }} />
+                  </div>
+                  <PressureText as="h3" className="text-2xl" style={{ fontFamily: "'Caveat', cursive" }}>
                     {selectedNode.label}
-                  </h3>
+                  </PressureText>
                 </div>
 
                 <div
-                  className="text-xs uppercase tracking-wider mb-4 px-2 py-1 rounded inline-block"
+                  className="text-sm uppercase tracking-wider mb-3 px-2 py-1 inline-block"
                   style={{
-                    backgroundColor: `${getNodeColor(selectedNode.type)}20`,
+                    fontFamily: "'Patrick Hand', cursive",
+                    border: `1.5px solid ${getNodeColor(selectedNode.type)}`,
+                    borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
                     color: getNodeColor(selectedNode.type),
                   }}
                 >
@@ -608,54 +642,27 @@ export default function IdentityGraph() {
                 <div className="space-y-4">
                   {selectedNode.type === "target" && (
                     <>
+                      <DetailRow label="Broker Platform" value={selectedNode.data.platform || ""} />
                       <div>
-                        <div className="text-xs mb-1" style={{ color: "#A0AEC0" }}>
-                          Broker Platform
-                        </div>
-                        <div className="text-sm" style={{ color: "#FFFFFF" }}>
-                          {selectedNode.data.platform}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs mb-1" style={{ color: "#A0AEC0" }}>
-                          Status
-                        </div>
+                        <div className="text-sm mb-1" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>Status</div>
                         <div
-                          className="text-sm px-2 py-1 rounded inline-block"
+                          className="text-base px-2 py-1 inline-block"
                           style={{
-                            backgroundColor:
-                              selectedNode.data.status === "Deletion Pending"
-                                ? "rgba(255, 159, 67, 0.2)"
-                                : selectedNode.data.status === "Identified"
-                                ? "rgba(255, 107, 107, 0.2)"
-                                : "rgba(79, 209, 197, 0.2)",
-                            color:
-                              selectedNode.data.status === "Deletion Pending"
-                                ? "#FF9F43"
-                                : selectedNode.data.status === "Identified"
-                                ? "#FF6B6B"
-                                : "#4FD1C5",
+                            fontFamily: "'Caveat', cursive",
+                            fontWeight: 700,
+                            border: "1px solid rgba(0,0,0,0.15)",
+                            borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
+                            color: selectedNode.data.status === "Deletion Pending" ? COLORS.orange : selectedNode.data.status === "Identified" ? COLORS.red : COLORS.green,
                           }}
                         >
                           {selectedNode.data.status}
                         </div>
                       </div>
-
                       <div>
-                        <div className="text-xs mb-2" style={{ color: "#A0AEC0" }}>
-                          Data Found
-                        </div>
+                        <div className="text-sm mb-2" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>Data Found</div>
                         <div className="space-y-1">
                           {selectedNode.data.details?.map((detail, index) => (
-                            <div
-                              key={index}
-                              className="text-sm px-2 py-1 rounded"
-                              style={{
-                                backgroundColor: "rgba(255, 107, 107, 0.1)",
-                                color: "#FFFFFF",
-                              }}
-                            >
+                            <div key={index} className="text-base px-2 py-1" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.text, borderBottom: "1px dashed rgba(0,0,0,0.1)" }}>
                               {detail}
                             </div>
                           ))}
@@ -666,28 +673,12 @@ export default function IdentityGraph() {
 
                   {selectedNode.type === "identity" && (
                     <>
+                      <DetailRow label="Value" value={selectedNode.data.value || ""} />
                       <div>
-                        <div className="text-xs mb-1" style={{ color: "#A0AEC0" }}>
-                          Value
-                        </div>
-                        <div className="text-sm" style={{ color: "#FFFFFF" }}>
-                          {selectedNode.data.value}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs mb-2" style={{ color: "#A0AEC0" }}>
-                          Details
-                        </div>
+                        <div className="text-sm mb-2" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>Details</div>
                         <div className="space-y-1">
                           {selectedNode.data.details?.map((detail, index) => (
-                            <div
-                              key={index}
-                              className="text-sm"
-                              style={{ color: "#E0E0E0" }}
-                            >
-                              • {detail}
-                            </div>
+                            <div key={index} className="text-base" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.text, opacity: 0.8 }}>• {detail}</div>
                           ))}
                         </div>
                       </div>
@@ -696,28 +687,11 @@ export default function IdentityGraph() {
 
                   {(selectedNode.type === "platform" || selectedNode.type === "username") && (
                     <>
-                      {selectedNode.data.platform && (
-                        <div>
-                          <div className="text-xs mb-1" style={{ color: "#A0AEC0" }}>
-                            Platform
-                          </div>
-                          <div className="text-sm" style={{ color: "#FFFFFF" }}>
-                            {selectedNode.data.platform}
-                          </div>
-                        </div>
-                      )}
-
+                      {selectedNode.data.platform && <DetailRow label="Platform" value={selectedNode.data.platform} />}
                       {selectedNode.data.value && (
                         <div>
-                          <div className="text-xs mb-1" style={{ color: "#A0AEC0" }}>
-                            Username
-                          </div>
-                          <div
-                            className="text-sm font-mono"
-                            style={{ color: "#4FD1C5" }}
-                          >
-                            {selectedNode.data.value}
-                          </div>
+                          <div className="text-sm mb-1" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>Username</div>
+                          <div className="text-lg" style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, color: COLORS.green }}>{selectedNode.data.value}</div>
                         </div>
                       )}
                     </>
@@ -725,25 +699,17 @@ export default function IdentityGraph() {
 
                   {selectedNode.type === "seed" && (
                     <div>
-                      <div className="text-xs mb-1" style={{ color: "#A0AEC0" }}>
-                        Seed Email
-                      </div>
-                      <div className="text-sm font-mono" style={{ color: "#6C63FF" }}>
-                        {selectedNode.label}
-                      </div>
-                      <div className="text-xs mt-2" style={{ color: "#717182" }}>
-                        This is the starting point for identity discovery
-                      </div>
+                      <div className="text-sm mb-1" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>Seed Email</div>
+                      <div className="text-lg" style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, color: COLORS.purple }}>{selectedNode.label}</div>
+                      <div className="text-sm mt-2 italic" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>This is the starting point for identity discovery</div>
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="mt-6 pt-6 border-t" style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}>
-                <div className="text-xs mb-2" style={{ color: "#A0AEC0" }}>
-                  Connections
-                </div>
-                <div className="text-sm" style={{ color: "#FFFFFF" }}>
+              <div className="mt-5 pt-4" style={{ borderTop: "1.5px dashed rgba(0,0,0,0.12)" }}>
+                <div className="text-sm mb-1" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>Connections</div>
+                <div className="text-2xl" style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, color: COLORS.text }}>
                   {selectedNode.connections.length} linked node{selectedNode.connections.length !== 1 ? "s" : ""}
                 </div>
               </div>
@@ -769,21 +735,26 @@ function ToggleButton({
   return (
     <button
       onClick={onToggle}
-      className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(108,99,255,0.1)] transition-colors"
+      className="w-full flex items-center justify-between px-3 py-2 transition-colors"
+      style={{
+        border: "1.5px dashed rgba(0,0,0,0.1)",
+        borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
+        backgroundColor: enabled ? "rgba(0,0,0,0.02)" : "transparent",
+      }}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <div
-          className="w-3 h-3 rounded-full"
-          style={{ backgroundColor: color }}
+          className="w-3 h-3 rounded-full border border-black/20"
+          style={{ backgroundColor: enabled ? color : "transparent" }}
         />
-        <span className="text-sm" style={{ color: "#0B0F1A" }}>
+        <span className="text-base" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.text, opacity: enabled ? 1 : 0.6 }}>
           {label}
         </span>
       </div>
       {enabled ? (
-        <Eye className="w-4 h-4" style={{ color: "#4FD1C5" }} />
+        <Eye className="w-4 h-4" style={{ color: color }} />
       ) : (
-        <EyeOff className="w-4 h-4" style={{ color: "#717182" }} />
+        <EyeOff className="w-4 h-4" style={{ color: COLORS.textSec, opacity: 0.5 }} />
       )}
     </button>
   );
@@ -793,10 +764,23 @@ function LegendItem({ color, label }: { color: string; label: string }) {
   return (
     <div className="flex items-center gap-2">
       <div
-        className="w-2 h-2 rounded-full"
-        style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}` }}
+        className="w-2.5 h-2.5 rounded-full border border-black/20"
+        style={{ backgroundColor: color }}
       />
-      <span style={{ color: "#717182" }}>{label}</span>
+      <span style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.text, fontSize: "15px" }}>{label}</span>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-dashed border-black/10 pb-2">
+      <div className="text-sm mb-1" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
+        {label}
+      </div>
+      <div className="text-lg" style={{ fontFamily: "'Caveat', cursive", fontWeight: 700, color: COLORS.text }}>
+        {value}
+      </div>
     </div>
   );
 }
