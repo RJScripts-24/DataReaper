@@ -46,9 +46,6 @@ export function HeroSection() {
         }}
       >
         <motion.h1
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
           style={{
             marginBottom: "26px",
           }}
@@ -73,9 +70,6 @@ export function HeroSection() {
         </motion.h1>
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
           style={{
             maxWidth: "558px",
             margin: "0 auto",
@@ -98,9 +92,6 @@ export function HeroSection() {
 
         {/* CTA Button */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.6 }}
           style={{ marginTop: "32px", display: "flex", justifyContent: "center" }}
         >
           <button

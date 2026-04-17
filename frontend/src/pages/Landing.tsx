@@ -7,19 +7,22 @@ import { ProcessFlowSection } from "../components/ProcessFlowSection";
 import { FinalCTASection } from "../components/FinalCTASection";
 import { Footer } from "../components/Footer";
 import { PressureFilter } from "../components/PressureFilter";
+import { LandingRevealMask } from "../components/LandingRevealMask";
 
 export default function Landing() {
   return (
     <div className="min-h-screen">
-      <PressureFilter />
-      <Navbar />
-      <HeroSection />
-      <ProblemSection />
-      <FeaturesSection />
-      <PrivacyEngineSection />
-      <ProcessFlowSection />
-      <FinalCTASection />
-      <Footer />
+      <LandingRevealMask>
+        <PressureFilter />
+        <Navbar />
+        <HeroSection />
+        <ProblemSection />
+        <FeaturesSection />
+        <PrivacyEngineSection />
+        <ProcessFlowSection />
+        <FinalCTASection />
+        <Footer />
+      </LandingRevealMask>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
-import { ChevronDown, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { PressureText } from "./PressureText";
 
 export function Navbar() {
@@ -21,9 +21,6 @@ export function Navbar() {
     <motion.nav
       className="fixed top-0 left-0 right-0 z-50"
       style={{ padding: "12px 20px" }}
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
     >
       <div
         className="hand-drawn-border"
@@ -67,36 +64,8 @@ export function Navbar() {
             </PressureText>
         </div>
 
-        {/* Center: Nav links */}
-        <div
-          className="hidden md:flex"
-          style={{ alignItems: "center", gap: "40px" }}
-        >
-          <a
-            href="#engine"
-            style={{ textDecoration: "none" }}
-          >
-            <PressureText variant="medium" className="paper-text" style={{ fontSize: "18px", fontFamily: "'Patrick Hand', cursive", display: "flex", alignItems: "center", gap: "4px" }}>
-              Pivot Engine <ChevronDown size={14} strokeWidth={1.5} />
-            </PressureText>
-          </a>
-          <a
-            href="#agents"
-            style={{ textDecoration: "none" }}
-          >
-            <PressureText variant="medium" className="paper-text" style={{ fontSize: "18px", fontFamily: "'Patrick Hand', cursive", display: "flex", alignItems: "center", gap: "4px" }}>
-              Multi-Agent <ChevronDown size={14} strokeWidth={1.5} />
-            </PressureText>
-          </a>
-          <a
-            href="#dashboard"
-            style={{ textDecoration: "none" }}
-          >
-            <PressureText variant="medium" className="paper-text" style={{ fontSize: "18px", fontFamily: "'Patrick Hand', cursive" }}>
-              Dashboard
-            </PressureText>
-          </a>
-        </div>
+        {/* Center: Nav links removed */}
+
 
         {/* Right: CTA */}
         <button
@@ -148,9 +117,7 @@ export function Navbar() {
               gap: "16px",
             }}
           >
-            <a href="#engine" className="pencil-text" style={{ fontSize: "18px", textDecoration: "none" }}>Pivot Engine</a>
-            <a href="#agents" className="pencil-text" style={{ fontSize: "18px", textDecoration: "none" }}>Multi-Agent</a>
-            <a href="#dashboard" className="pencil-text" style={{ fontSize: "18px", textDecoration: "none" }}>Dashboard</a>
+
             <button
               onClick={() => navigate("/onboarding")}
               className="hand-drawn-button"
