@@ -3,7 +3,10 @@
 from typing import Any
 from urllib.parse import urlparse
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+try:
+    from playwright.async_api import async_playwright
+except ModuleNotFoundError:  # pragma: no cover - depends on local optional deps
+    async_playwright = None
 
 from datareaper.core.config import get_settings
 from datareaper.core.logging import get_logger
@@ -64,12 +67,16 @@ logger = get_logger(__name__)
 class PlaywrightClient:
     def __init__(self) -> None:
         self._playwright = None
-        self._browser: Browser | None = None
+        self._browser: Any | None = None
         self._settings = get_settings()
 
     async def start(self) -> None:
         if self._browser is not None:
             return
+        if async_playwright is None:
+            raise RuntimeError(
+                "playwright is not installed. Install optional browser dependencies before running OSINT browser tasks."
+            )
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             headless=self._settings.playwright_headless
@@ -87,7 +94,7 @@ class PlaywrightClient:
         if self._browser is None:
             await self.start()
 
-    async def _new_context(self, proxy: str | None = None, stealth: bool = True) -> BrowserContext:
+    async def _new_context(self, proxy: str | None = None, stealth: bool = True) -> Any:
         await self._ensure_browser()
         assert self._browser is not None
         context_kwargs: dict[str, Any] = {
@@ -110,7 +117,7 @@ class PlaywrightClient:
         stealth: bool = True,
     ) -> dict:
         context = await self._new_context(proxy=proxy, stealth=stealth)
-        page: Page = await context.new_page()
+        page = await context.new_page()
         try:
             host = urlparse(url).netloc.lower().replace("www.", "")
             matched_selector = next(

@@ -1,19 +1,66 @@
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useState } from "react";
+import { motion } from "motion/react";
 import { useNavigate } from "react-router";
-import { Navbar } from "../components/Navbar";
-import { Footer } from "../components/Footer";
+import { toast } from "sonner";
 import { PressureText } from "../components/PressureText";
 import { PressureInput } from "../components/PressureInput";
 import { PressureFilter } from "../components/PressureFilter";
+import { ApiClientError } from "../lib/apiClient";
+import { useCreateScanMutation } from "../lib/hooks";
+import { useScanContext } from "../lib/scanContext";
+
+function detectSeedType(value: string): "email" | "phone" | null {
+  const normalized = value.trim();
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phonePattern = /^\+?[0-9()\-\s]{7,20}$/;
+
+  if (emailPattern.test(normalized)) {
+    return "email";
+  }
+  if (phonePattern.test(normalized)) {
+    return "phone";
+  }
+  return null;
+}
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const { setActiveScan } = useScanContext();
+  const createScanMutation = useCreateScanMutation();
   const [input, setInput] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
 
-  const handleInitialize = () => {
-    if (!input.trim()) return;
-    navigate("/command-center");
+  const handleInitialize = async () => {
+    const normalized = input.trim();
+    if (!normalized || createScanMutation.isPending) {
+      return;
+    }
+
+    const detectedSeedType = detectSeedType(normalized);
+    if (!detectedSeedType) {
+      setInputError("Enter a valid email address or phone number.");
+      return;
+    }
+
+    setInputError(null);
+
+    try {
+      const response = await createScanMutation.mutateAsync({
+        seed: {
+          type: detectedSeedType,
+          value: normalized,
+        },
+        jurisdictionHint: "AUTO",
+      });
+
+      setActiveScan(response.scanId);
+      toast.success("Scan launched. Command Center is now live.");
+      navigate(response.routeHints.commandCenter);
+    } catch (error) {
+      const message = error instanceof ApiClientError ? error.message : "Failed to launch scan. Please retry.";
+      setInputError(message);
+      toast.error(message);
+    }
   };
 
   return (
@@ -101,7 +148,12 @@ export default function Onboarding() {
                   <PressureInput
                     type="text"
                     value={input}
-                    onChange={(e: any) => setInput(e.target.value)}
+                    onChange={(e: any) => {
+                      setInput(e.target.value);
+                      if (inputError) {
+                        setInputError(null);
+                      }
+                    }}
                     onKeyDown={(e: any) => {
                       if (e.key === "Enter") handleInitialize();
                     }}
@@ -120,15 +172,28 @@ export default function Onboarding() {
                   />
                 </div>
 
+                {inputError && (
+                  <PressureText
+                    as="p"
+                    variant="lite"
+                    className="paper-text mb-6 text-lg"
+                    style={{ fontFamily: "'Patrick Hand', cursive", color: "#b94a48" }}
+                  >
+                    {inputError}
+                  </PressureText>
+                )}
+
                 <motion.button
                   onClick={handleInitialize}
-                  disabled={!input.trim()}
-                  whileHover={{ scale: input.trim() ? 1.02 : 1, rotate: -0.5 }}
-                  whileTap={{ scale: input.trim() ? 0.98 : 1 }}
+                  disabled={!input.trim() || createScanMutation.isPending}
+                  whileHover={{ scale: input.trim() && !createScanMutation.isPending ? 1.02 : 1, rotate: -0.5 }}
+                  whileTap={{ scale: input.trim() && !createScanMutation.isPending ? 0.98 : 1 }}
                   className="w-full py-5 hand-drawn-button text-2xl"
-                  style={{ opacity: !input.trim() ? 0.5 : 1 }}
+                  style={{ opacity: !input.trim() || createScanMutation.isPending ? 0.5 : 1 }}
                 >
-                  <PressureText className="paper-text">Launch Sleuth Agent</PressureText>
+                  <PressureText className="paper-text">
+                    {createScanMutation.isPending ? "Launching Sleuth Agent..." : "Launch Sleuth Agent"}
+                  </PressureText>
                 </motion.button>
               </div>
             </motion.div>

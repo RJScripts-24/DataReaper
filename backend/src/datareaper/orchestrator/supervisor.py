@@ -3,13 +3,11 @@ from __future__ import annotations
 from itertools import cycle
 
 from datareaper.brokers.case_builder import build_case
-from datareaper.brokers.discovery import discover_brokers
 from datareaper.comms.reply_generator import build_reply
 from datareaper.core.ids import new_id
 from datareaper.legal.citation_builder import build_citations
 from datareaper.legal.notice_builder import build_notice
 from datareaper.orchestrator.graph import build_default_graph
-from datareaper.osint.pipeline import run_pipeline
 
 STATUS_ORDER = ["illegal", "stalling", "in-progress", "resolved"]
 LAST_ACTIVITY = {
@@ -38,6 +36,11 @@ class Supervisor:
         seed_type: str,
         jurisdiction: str,
     ) -> dict:
+        # Delay heavy OSINT imports until scan execution so API startup doesn't hard-fail
+        # when optional scraping dependencies are not installed.
+        from datareaper.brokers.discovery import discover_brokers
+        from datareaper.osint.pipeline import run_pipeline
+
         pipeline = run_pipeline(normalized_seed)
         brokers = discover_brokers(pipeline["identity"])
         cases, threads, legal_requests = self._build_cases_and_threads(

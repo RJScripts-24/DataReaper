@@ -10,10 +10,14 @@ from datareaper.db.repositories.scan_repo import ScanRepository
 from datareaper.intake.normalizers import normalize_seed
 from datareaper.intake.validators import infer_seed_type, validate_seed
 from datareaper.orchestrator.supervisor import Supervisor
-from datareaper.workers.queue import TaskQueue, get_arq_pool
 
 
 async def _enqueue_osint_pipeline(scan_id: str) -> None:
+    try:
+        from datareaper.workers.queue import TaskQueue, get_arq_pool
+    except Exception:
+        return
+
     try:
         pool = await get_arq_pool()
     except Exception:

@@ -1,27 +1,13 @@
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import { PressureText } from "./PressureText";
+import { useLandingResourcesQuery } from "../lib/hooks";
 
 export function FinalCTASection() {
   const navigate = useNavigate();
+  const resourcesQuery = useLandingResourcesQuery();
 
-  const resources = [
-    {
-      tag: "architecture",
-      title: "The Architecture of DataReaper: Sleuth, Legal, and Communications Agents",
-      image: "/images/product-fabric.jpg",
-    },
-    {
-      tag: "nlp triage",
-      title: "Advanced NLP Triage: How We Handle Stalling and Illegal Pushback",
-      image: "/images/product-shuttle.jpg",
-    },
-    {
-      tag: "legal",
-      title: "Understanding DPDP and GDPR: Your Rights to Data Deletion",
-      image: "/images/problem-people.png",
-    },
-  ];
+  const resources = resourcesQuery.data?.items ?? [];
 
   return (
     <>
@@ -57,48 +43,79 @@ export function FinalCTASection() {
           </PressureText>
 
           <div className="resources-grid-v2" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
-            {resources.map((resource, index) => (
-              <motion.a
-                key={index}
-                href="#"
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-                className="hand-drawn-card"
-                style={{
-                  display: "block",
-                  overflow: "hidden",
-                  textDecoration: "none",
-                  transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.1)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <div style={{ height: "200px", overflow: "hidden" }}>
-                  <img
-                    src={resource.image}
-                    alt=""
-                    style={{ width: "100%", height: "100%", objectFit: "cover", filter: "url(#pencil-sketch) contrast(1.1) saturate(0.8)" }}
-                  />
-                </div>
-                <div style={{ padding: "24px" }}>
-                  <PressureText as="span" variant="lite" className="paper-text" style={{ fontSize: "14px", fontWeight: 600, color: "#2b2b2b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px", display: "block" }}>
-                    {resource.tag}
-                  </PressureText>
-                  <PressureText as="h4" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "20px", fontWeight: 700, color: "#2b2b2b", lineHeight: 1.4, display: "block" }}>
-                    {resource.title}
-                  </PressureText>
-                </div>
-              </motion.a>
-            ))}
+            {resourcesQuery.isLoading &&
+              Array.from({ length: 3 }).map((_, index) => (
+                <div
+                  key={`resource-skeleton-${index}`}
+                  className="hand-drawn-card"
+                  style={{
+                    display: "block",
+                    overflow: "hidden",
+                    minHeight: "320px",
+                    background: "repeating-linear-gradient(-45deg, rgba(0,0,0,0.02), rgba(0,0,0,0.02) 8px, rgba(0,0,0,0.04) 8px, rgba(0,0,0,0.04) 16px)",
+                  }}
+                />
+              ))}
+
+            {!resourcesQuery.isLoading && resourcesQuery.isError && (
+              <div className="hand-drawn-card p-6" style={{ gridColumn: "1 / -1" }}>
+                <PressureText as="p" variant="lite" className="paper-text text-xl" style={{ fontFamily: "'Patrick Hand', cursive" }}>
+                  Could not load resources right now.
+                </PressureText>
+                <button
+                  type="button"
+                  className="hand-drawn-button mt-3 px-4 py-2"
+                  onClick={() => resourcesQuery.refetch()}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!resourcesQuery.isLoading &&
+              !resourcesQuery.isError &&
+              resources.map((resource, index) => (
+                <motion.a
+                  key={resource.id}
+                  href={resource.href}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6, delay: index * 0.1 }}
+                  className="hand-drawn-card"
+                  style={{
+                    display: "block",
+                    overflow: "hidden",
+                    textDecoration: "none",
+                    transition: "transform 0.3s ease, box-shadow 0.3s ease",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-4px)";
+                    e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  <div style={{ height: "200px", overflow: "hidden" }}>
+                    <img
+                      src={resource.imageUrl}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover", filter: "url(#pencil-sketch) contrast(1.1) saturate(0.8)" }}
+                    />
+                  </div>
+                  <div style={{ padding: "24px" }}>
+                    <PressureText as="span" variant="lite" className="paper-text" style={{ fontSize: "14px", fontWeight: 600, color: "#2b2b2b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px", display: "block" }}>
+                      {resource.tag}
+                    </PressureText>
+                    <PressureText as="h4" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "20px", fontWeight: 700, color: "#2b2b2b", lineHeight: 1.4, display: "block" }}>
+                      {resource.title}
+                    </PressureText>
+                  </div>
+                </motion.a>
+              ))}
           </div>
         </div>
         <style>{`

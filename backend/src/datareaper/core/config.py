@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,11 +13,15 @@ class Settings(BaseSettings):
 
     app_name: str = "DataReaper Backend"
     app_env: Literal["development", "test", "production"] = "development"
-    app_host: str = "127.0.0.1"
-    app_port: int = 8000
+    app_host: str = Field(default="0.0.0.0", validation_alias=AliasChoices("APP_HOST", "API_HOST"))
+    app_port: int = Field(default=8000, validation_alias=AliasChoices("APP_PORT", "API_PORT"))
     app_debug: bool = True
     app_log_level: str = "INFO"
-    app_cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    frontend_url: str = Field(default="http://localhost:5173", validation_alias=AliasChoices("FRONTEND_URL", "APP_FRONTEND_URL"))
+    app_cors_origins: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("APP_CORS_ORIGINS", "CORS_ORIGINS"),
+    )
     app_secret_key: str = "change-me"
     app_enable_demo_mode: bool = True
     app_auto_create_tables: bool = False
@@ -58,6 +62,19 @@ class Settings(BaseSettings):
     @property
     def effective_arq_redis_url(self) -> str:
         return self.arq_redis_url or self.redis_url
+
+    @model_validator(mode="after")
+    def ensure_cors_origins(self) -> "Settings":
+        default_origins = {
+            "http://localhost:5173",
+            "http://localhost:3000",
+        }
+        if self.frontend_url:
+            default_origins.add(self.frontend_url.rstrip("/"))
+
+        configured = {origin.rstrip("/") for origin in self.app_cors_origins if origin}
+        self.app_cors_origins = sorted(default_origins | configured)
+        return self
 
 
 @lru_cache

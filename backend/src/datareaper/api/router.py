@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from datareaper.api.routes import (
+    content,
     dashboard,
     events,
     health,
@@ -12,6 +13,7 @@ from datareaper.api.routes import (
     reports,
     scans,
     targets,
+    v1_contract,
     war_room,
 )
 
@@ -26,3 +28,7 @@ api_router.include_router(war_room.router, prefix="/war-room", tags=["war-room"]
 api_router.include_router(inbox.router, prefix="/inbox", tags=["inbox"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(events.router, prefix="/events", tags=["events"])
+
+v1_router = APIRouter()
+v1_router.include_router(v1_contract.router, tags=["v1"])
+v1_router.include_router(content.router, prefix="/content", tags=["content"])
