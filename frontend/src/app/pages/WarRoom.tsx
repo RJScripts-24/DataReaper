@@ -319,56 +319,55 @@ export default function WarRoom() {
   };
 
   return (
-    <div
-      className="min-h-screen relative w-full overflow-x-hidden"
-      style={{ backgroundColor: COLORS.bg }}
-    >
+    <div className="min-h-screen relative w-full overflow-x-hidden">
       <PressureFilter />
-
-      {/* Navbar */}
+      {/* War Room Header */}
       <nav
-        className="sticky top-0 z-50 pt-4 pb-3 px-6 md:px-12 lg:px-16 flex items-center justify-between backdrop-blur-sm"
-        style={{ backgroundColor: "rgba(245, 243, 239, 0.8)", borderBottom: "1.5px dashed rgba(0,0,0,0.15)" }}
+        className="sticky top-0 z-50 px-4 md:px-8 lg:px-12 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 backdrop-blur-sm"
+        style={{ backgroundColor: "rgba(245, 243, 239, 0.88)", borderBottom: "1.5px dashed rgba(0,0,0,0.15)" }}
       >
-        <div className="max-w-[1600px] w-full mx-auto flex items-center justify-between">
-          <PressureText
-            as="span"
-            className="text-3xl tracking-tight cursor-pointer"
-            style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}
-            onClick={() => navigate("/")}
-          >
-            DataReaper
-          </PressureText>
-
-          <div className="hidden md:flex items-center gap-8">
-            <button onClick={() => navigate("/command-center")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Dashboard</button>
-            <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70">War Room</button>
-            <button onClick={() => navigate("/identity-graph")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Identity Graph</button>
-            <button className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Reports</button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <motion.div
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: COLORS.red, boxShadow: `0 0 8px ${COLORS.red}44` }}
-                animate={{ opacity: [1, 0.4, 1], scale: [1, 1.2, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              />
-              <PressureText as="span" className="text-xl" style={{ color: COLORS.red, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>Active Engagement</PressureText>
-            </div>
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-[#1a1a1a] shadow-sm cursor-pointer"
-              style={{ filter: "url(#pencil-sketch)", backgroundColor: "#e2e8f0" }}
+        <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center">
+          <div className="hidden md:block" />
+          <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8">
+            <button
+              onClick={() => navigate("/command-center")}
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
             >
-              <span className="pencil-heading text-lg font-bold">U</span>
-            </div>
+              Dashboard
+            </button>
+            <button
+              className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70"
+              aria-current="page"
+            >
+              War Room
+            </button>
+            <button
+              onClick={() => navigate("/identity-graph")}
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
+            >
+              Identity Graph
+            </button>
+          </div>
+          <div className="flex items-center justify-center md:justify-end gap-2">
+            <motion.div
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ backgroundColor: COLORS.red, boxShadow: `0 0 8px ${COLORS.red}44` }}
+              animate={{ opacity: [1, 0.4, 1], scale: [1, 1.2, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            />
+            <PressureText
+              as="span"
+              className="text-lg md:text-xl"
+              style={{ color: COLORS.red, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}
+            >
+              War Room · Active Engagement
+            </PressureText>
           </div>
         </div>
       </nav>
 
       {/* Main Split Screen */}
-      <div className="flex h-[calc(100vh-73px)] max-w-[1600px] mx-auto p-4 gap-6">
+      <div className="flex h-[calc(100vh-92px)] w-full p-4 md:p-6 gap-6">
         {/* Left Pane - Active Targets */}
         <div
           className="w-[30%] hand-drawn-card overflow-hidden flex flex-col"

@@ -274,10 +274,7 @@ export default function IdentityGraph() {
   };
 
   return (
-    <div
-      className="min-h-screen relative w-full overflow-x-hidden"
-      style={{ backgroundColor: COLORS.bg }}
-    >
+    <div className="min-h-screen relative w-full overflow-x-hidden">
       <PressureFilter />
 
       {/* Navbar */}
@@ -299,7 +296,6 @@ export default function IdentityGraph() {
             <button onClick={() => navigate("/command-center")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Dashboard</button>
             <button onClick={() => navigate("/war-room")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">War Room</button>
             <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70">Identity Graph</button>
-            <button className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Reports</button>
           </div>
 
           <div className="flex items-center gap-4">

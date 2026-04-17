@@ -723,7 +723,6 @@ export default function CommandCenter() {
             <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70">Dashboard</button>
             <button onClick={() => navigate("/war-room")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">War Room</button>
             <button onClick={() => navigate("/identity-graph")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Identity Graph</button>
-            <button className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Reports</button>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
