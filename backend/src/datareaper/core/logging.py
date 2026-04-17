@@ -16,3 +16,9 @@ def configure_logging(level: str = "INFO") -> None:
             wrapper_class=structlog.make_filtering_bound_logger(resolved_level),
             logger_factory=structlog.PrintLoggerFactory(),
         )
+
+
+def get_logger(name: str):
+    if structlog is not None:
+        return structlog.get_logger(name)
+    return logging.getLogger(name)

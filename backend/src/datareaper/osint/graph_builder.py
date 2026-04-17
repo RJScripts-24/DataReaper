@@ -10,6 +10,8 @@ def build_graph(
 ) -> dict:
     usernames = usernames or []
     identity = identity or {"name": "John Doe", "location": "Bangalore"}
+    identity_name = str(identity.get("name") or "Unknown")
+    identity_location = str(identity.get("location") or "Unknown")
 
     nodes = [
         {"id": "seed", "type": "seed", "label": seed, "x": 400, "y": 300, "data": {"kind": "seed"}},
@@ -50,7 +52,7 @@ def build_graph(
         {
             "id": "identity_name",
             "type": "identity",
-            "label": identity.get("name", "Unknown"),
+            "label": identity_name,
             "x": 250,
             "y": 420,
             "data": {"kind": "person"},
@@ -58,7 +60,7 @@ def build_graph(
         {
             "id": "identity_location",
             "type": "identity",
-            "label": identity.get("location", "Unknown"),
+            "label": identity_location,
             "x": 550,
             "y": 420,
             "data": {"kind": "location"},

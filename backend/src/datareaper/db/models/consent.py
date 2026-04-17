@@ -1,9 +1,8 @@
 ﻿from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Integer, String, Text
+from sqlalchemy import Boolean, Column, String
 
 from datareaper.db.base import Base, TimestampMixin
-from datareaper.db.types import JSONType
 
 
 class Consent(Base, TimestampMixin):

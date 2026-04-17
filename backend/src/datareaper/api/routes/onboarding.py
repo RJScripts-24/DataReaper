@@ -17,4 +17,4 @@ async def initialize(
     service: OnboardingService = Depends(get_onboarding_service),
 ) -> dict:
     enforce_consent(payload.consent_confirmed)
-    return await service.initialize_scan(db, payload.seed, payload.seed_type, payload.jurisdiction)
+    return await service.initialize_scan(db, payload.seeds, payload.seed_type, payload.jurisdiction)

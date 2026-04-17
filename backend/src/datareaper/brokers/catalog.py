@@ -2,10 +2,24 @@
 
 from pathlib import Path
 
-from datareaper.core.config import get_settings
 import yaml
+
+from datareaper.core.config import get_settings
+
+
+def _candidate_paths() -> list[Path]:
+    settings = get_settings()
+    root_catalog = settings.data_dir / "brokers" / "broker_catalog.yaml"
+    package_catalog = Path(__file__).resolve().parents[1] / "data" / "brokers" / "broker_catalog.yaml"
+    return [root_catalog, package_catalog]
 
 
 def load_broker_catalog() -> dict:
-    settings = get_settings()
-    return yaml.safe_load(Path(settings.data_dir / "brokers" / "broker_catalog.yaml").read_text(encoding="utf-8"))
+    for path in _candidate_paths():
+        if not path.exists():
+            continue
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            payload.setdefault("brokers", [])
+            return payload
+    return {"brokers": []}

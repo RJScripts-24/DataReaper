@@ -1,9 +1,8 @@
 ﻿from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Integer, String, Text
+from sqlalchemy import Column, String
 
 from datareaper.db.base import Base, TimestampMixin
-from datareaper.db.types import JSONType
 
 
 class Seed(Base, TimestampMixin):

@@ -8,13 +8,14 @@ class BattleMessageSchema(BaseModel):
     type: str
     content: str
     timestamp: str
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: dict = Field(default_factory=dict)
 
 
 class BattleThreadSchema(BaseModel):
     target_id: str
     broker_name: str
     status: str
+    deadline_remaining: str | None = None
     messages: list[BattleMessageSchema]
 
 

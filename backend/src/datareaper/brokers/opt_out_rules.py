@@ -2,8 +2,9 @@
 
 from pathlib import Path
 
-from datareaper.core.config import get_settings
 import yaml
+
+from datareaper.core.config import get_settings
 
 
 def load_opt_out_rules() -> dict:

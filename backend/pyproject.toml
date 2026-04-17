@@ -5,11 +5,18 @@ description = "Autonomous privacy defense backend for DataReaper"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "apscheduler>=3.11.0",
+  "arq>=0.26.1",
   "alembic>=1.14.0",
   "asyncpg>=0.30.0",
+  "beautifulsoup4>=4.13.0",
+  "curl-cffi>=0.14.0",
   "email-validator>=2.2.0",
   "fastapi>=0.116.0",
+  "google-api-python-client>=2.147.0",
+  "google-auth-oauthlib>=1.2.1",
   "greenlet>=3.1.1",
+  "groq>=0.4.2",
   "httpx>=0.28.1",
   "orjson>=3.10.18",
   "playwright>=1.52.0",
@@ -21,6 +28,8 @@ dependencies = [
   "pyyaml>=6.0.2",
   "sqlalchemy>=2.0.40",
   "structlog>=25.3.0",
+  "supabase>=2.3.0",
+  "tenacity>=9.0.0",
   "typer>=0.15.3",
   "uvicorn[standard]>=0.34.2",
 ]

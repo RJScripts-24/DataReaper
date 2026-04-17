@@ -4,6 +4,18 @@ from datareaper.main import app
 
 
 def test_dashboard_api() -> None:
-    client = TestClient(app)
-    response = client.get("/api/dashboard/demo")
-    assert response.status_code == 200
+    with TestClient(app) as client:
+        initialized = client.post(
+            "/api/onboarding/initialize",
+            json={
+                "seed": "dashboard@email.com",
+                "seed_type": "email",
+                "jurisdiction": "DPDP",
+                "consent_confirmed": True,
+            },
+        )
+        assert initialized.status_code == 200
+        scan_id = initialized.json()["scan_id"]
+
+        response = client.get(f"/api/dashboard/{scan_id}")
+        assert response.status_code == 200

@@ -23,6 +23,15 @@ from datareaper.db.models.scan_job import ScanJob
 from datareaper.db.models.scan_stage import ScanStage
 from datareaper.db.models.seed import Seed
 
+TERMINAL_SCAN_STATUSES = {"completed", "resolved", "failed", "cancelled"}
+
+
+def _is_active_scan_status(status: str | None) -> bool:
+    normalized = str(status or "").strip().lower()
+    if not normalized:
+        return True
+    return normalized not in TERMINAL_SCAN_STATUSES
+
 
 class ScanRepository:
     async def create_scan_bundle(self, session: AsyncSession | None, bundle: dict) -> dict:
@@ -82,7 +91,11 @@ class ScanRepository:
                     scan_job_id=scan["id"],
                     profile_id=profile_id,
                     platform=platform,
-                    username=usernames[index - 1] if index - 1 < len(usernames) else f"user_{index}",
+                    username=(
+                        usernames[index - 1]
+                        if index - 1 < len(usernames)
+                        else f"user_{index}"
+                    ),
                     profile_url=f"https://example.com/{platform.lower()}",
                     confidence=88 + index,
                 )
@@ -171,7 +184,11 @@ class ScanRepository:
                         thread_id=thread["thread_id"],
                         direction=message["type"],
                         body=message["content"],
-                        sender=thread["broker_name"] if message["type"] == "broker" else "DataReaper",
+                        sender=(
+                            thread["broker_name"]
+                            if message["type"] == "broker"
+                            else "DataReaper"
+                        ),
                         metadata_json=message.get("metadata", {}),
                         display_timestamp=message["timestamp"],
                     )
@@ -222,6 +239,23 @@ class ScanRepository:
             "progress": bundle["scan"]["progress"],
         }
 
+    async def list_active_scan_ids(self, session: AsyncSession | None) -> list[str]:
+        if session is None:
+            active_ids: list[str] = []
+            for scan_id in memory_store.list_scan_ids():
+                bundle = memory_store.get_scan_bundle(scan_id) or {}
+                status = (bundle.get("scan") or {}).get("status")
+                if _is_active_scan_status(status):
+                    active_ids.append(scan_id)
+            return active_ids
+
+        rows = await session.execute(select(ScanJob.id, ScanJob.status))
+        return [
+            scan_id
+            for scan_id, status in rows.all()
+            if _is_active_scan_status(status)
+        ]
+
     async def load_scan_bundle(self, session: AsyncSession | None, scan_id: str) -> dict:
         if session is None:
             bundle = memory_store.get_scan_bundle(scan_id)
@@ -244,7 +278,9 @@ class ScanRepository:
         nodes = await session.execute(select(GraphNode).where(GraphNode.scan_job_id == scan_id))
         edges = await session.execute(select(GraphEdge).where(GraphEdge.scan_job_id == scan_id))
         cases = await session.execute(select(BrokerCase).where(BrokerCase.scan_job_id == scan_id))
-        events = await session.execute(select(ActivityEvent).where(ActivityEvent.scan_job_id == scan_id))
+        events = await session.execute(
+            select(ActivityEvent).where(ActivityEvent.scan_job_id == scan_id)
+        )
         agent_runs = await session.execute(select(AgentRun).where(AgentRun.scan_job_id == scan_id))
         report = await session.execute(
             select(ReportSnapshot).where(ReportSnapshot.scan_job_id == scan_id)

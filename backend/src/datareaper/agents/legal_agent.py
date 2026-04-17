@@ -1,12 +1,28 @@
 ﻿from __future__ import annotations
 
 from datareaper.agents.base import AgentResult, BaseAgent
-from datareaper.legal.notice_builder import build_notice
+from datareaper.legal.notice_builder import build_notice, build_notice_with_llm
 
 
 class LegalAgent(BaseAgent):
     name = "legal"
 
-    def run(self, context: dict) -> AgentResult:
-        context = {**context, "notice": build_notice(context.get("jurisdiction", "DPDP"), context.get("seed", "user@email.com"))}
-        return AgentResult(agent=self.name, status="ok", payload=context)
+    async def run(self, context: dict) -> AgentResult:
+        jurisdiction = context.get("jurisdiction", "DPDP")
+        seed = context.get("seed", "")
+        identity = context.get("identity", {})
+        notices: list[dict] = []
+
+        for target in context.get("targets", []):
+            broker_name = target.get("broker_name") if isinstance(target, dict) else str(target)
+            if self.llm is not None:
+                notice = await build_notice_with_llm(jurisdiction, seed, identity, broker_name, self.llm)
+            else:
+                notice = build_notice(jurisdiction, seed, identity, broker_name)
+            notices.append({"broker_name": broker_name, "notice": notice})
+
+        return AgentResult(
+            agent=self.name,
+            status="ok",
+            payload={**context, "notices": notices},
+        )

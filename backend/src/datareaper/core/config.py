@@ -21,17 +21,26 @@ class Settings(BaseSettings):
     app_secret_key: str = "change-me"
     app_enable_demo_mode: bool = True
     app_auto_create_tables: bool = False
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost/datareaper"
-    sync_database_url: str = "postgresql+psycopg://postgres:postgres@localhost/datareaper"
+    supabase_url: str = ""
+    supabase_key: str = ""
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+    sync_database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"
     redis_url: str = "redis://localhost:6379/0"
-    llm_provider: str = "gemini"
-    gemini_api_key: str = ""
+    arq_redis_url: str = ""
+    llm_provider: str = "groq"
+    groq_model: str = "llama-3.3-70b-versatile"
     groq_api_key: str = ""
+    brave_search_api_key: str = ""
+    github_api_token: str = ""
+    serp_api_key: str = ""
+    proxycurl_api_key: str = ""
+    default_jurisdiction: str = "DPDP"
     gmail_client_id: str = ""
     gmail_client_secret: str = ""
     gmail_refresh_token: str = ""
     gmail_sender_email: str = ""
     playwright_headless: bool = True
+    playwright_proxy_server: str = ""
     local_storage_path: str = "./storage"
 
     @property
@@ -41,6 +50,14 @@ class Settings(BaseSettings):
     @property
     def data_dir(self) -> Path:
         return self.project_root / "data"
+
+    @property
+    def is_supabase_db(self) -> bool:
+        return "supabase" in self.database_url.lower()
+
+    @property
+    def effective_arq_redis_url(self) -> str:
+        return self.arq_redis_url or self.redis_url
 
 
 @lru_cache
