@@ -18,6 +18,9 @@ class InMemoryStore:
         bundle = self._scans.get(scan_id)
         return deepcopy(bundle) if bundle else None
 
+    def list_scan_ids(self) -> list[str]:
+        return list(self._scans.keys())
+
     def get_thread(self, target_id: str) -> dict | None:
         scan_id = self._target_index.get(target_id)
         if scan_id is None:

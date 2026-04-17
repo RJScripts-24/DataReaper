@@ -11,7 +11,6 @@ from datareaper.legal.notice_builder import build_notice
 from datareaper.orchestrator.graph import build_default_graph
 from datareaper.osint.pipeline import run_pipeline
 
-
 STATUS_ORDER = ["illegal", "stalling", "in-progress", "resolved"]
 LAST_ACTIVITY = {
     "illegal": "2 min ago",

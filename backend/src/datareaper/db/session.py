@@ -1,14 +1,39 @@
 from __future__ import annotations
 
+import ssl
 from collections.abc import AsyncIterator
+
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from datareaper.core.config import get_settings
 
-settings = get_settings()
+
+def get_engine():
+    settings = get_settings()
+    engine_kwargs: dict = {}
+
+    # Prevent cross-event-loop connection reuse in tests (TestClient starts/stops loops frequently).
+    if settings.app_env == "test":
+        engine_kwargs["poolclass"] = NullPool
+
+    if settings.is_supabase_db:
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        engine_kwargs["connect_args"] = {"ssl": ssl_context}
+
+    return create_async_engine(
+        settings.database_url,
+        echo=settings.app_debug,
+        future=True,
+        **engine_kwargs,
+    )
+
+
 try:
-    engine = create_async_engine(settings.database_url, echo=settings.app_debug, future=True)
+    engine = get_engine()
     SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 except Exception:  # pragma: no cover - local fallback when DB driver is not installed
     engine = None

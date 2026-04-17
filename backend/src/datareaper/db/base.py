@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, MetaData, func
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
-
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -19,9 +16,9 @@ Base = declarative_base(metadata=MetaData(naming_convention=NAMING_CONVENTION))
 
 class TimestampMixin:
     @declared_attr
-    def created_at(cls) -> Column[datetime]:
+    def created_at(cls):  # noqa: N805
         return Column(DateTime(timezone=True), server_default=func.now())
 
     @declared_attr
-    def updated_at(cls) -> Column[datetime]:
+    def updated_at(cls):  # noqa: N805
         return Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

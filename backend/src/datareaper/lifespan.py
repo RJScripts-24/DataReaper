@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from datareaper.core.config import get_settings
 from datareaper.core.logging import configure_logging
-from datareaper.db.base import Base
 from datareaper.db import models as _models  # noqa: F401
+from datareaper.db.base import Base
 from datareaper.db.session import engine
 
 

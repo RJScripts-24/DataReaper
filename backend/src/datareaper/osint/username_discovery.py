@@ -1,5 +1,85 @@
 ﻿from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 
-def discover_usernames(accounts: list[str]) -> list[str]:
-    return ["johndoe_dev", "john_doe"] if accounts else []
+from datareaper.integrations.browser.playwright_client import PlaywrightClient
+from datareaper.osint.collectors.sherlock_runner import discover_profiles_via_sherlock
+
+USERNAME_PATTERN = re.compile(
+    r"(?:github\.com|twitter\.com|x\.com|instagram\.com|linkedin\.com/in|reddit\.com/user)/([A-Za-z0-9_.-]+)",
+    re.IGNORECASE,
+)
+
+
+def _seed_variants(seed: str) -> set[str]:
+    normalized = seed.strip().lower()
+    if not normalized:
+        return set()
+
+    local = normalized.split("@", 1)[0] if "@" in normalized else normalized
+    local = re.sub(r"[^a-z0-9._-]", "", local)
+    if not local:
+        return set()
+
+    variants = {
+        local,
+        re.sub(r"[._-]", "", local),
+    }
+
+    # Strip trailing digits to get base username.
+    base = re.sub(r"\d+$", "", local)
+    if base and len(base) >= 3 and base != local:
+        variants.add(base)
+
+    parts = [part for part in re.split(r"[._-]+", local) if part]
+    if parts:
+        first = re.sub(r"\d+$", "", parts[0])
+        last_raw = parts[-1]
+        last = re.sub(r"\d+$", "", last_raw)
+        digits_match = re.search(r"(\d+)$", local)
+        digits = digits_match.group(1) if digits_match else ""
+
+        if first and last and first != last:
+            variants.add(f"{first}{last}")
+            variants.add(f"{first}.{last}")
+            if digits:
+                variants.add(f"{first}{last}{digits}")
+                variants.add(f"{last}{digits}")
+
+    return {item for item in variants if len(item) >= 3}
+
+
+def _extract_from_accounts(accounts: Iterable[dict]) -> set[str]:
+    extracted: set[str] = set()
+    for account in accounts:
+        url = str(account.get("url") or "")
+        match = USERNAME_PATTERN.search(url)
+        if match:
+            extracted.add(match.group(1).strip().lower())
+    return extracted
+
+
+async def discover_usernames(
+    accounts: list[dict],
+    original_seeds: list[str] | None = None,
+    browser: PlaywrightClient | None = None,
+) -> list[str]:
+    generated = _extract_from_accounts(accounts)
+
+    for seed in original_seeds or []:
+        generated.update(_seed_variants(seed))
+
+    generated = {username for username in generated if username}
+    if not generated:
+        return []
+
+    if browser is None:
+        return sorted(generated)
+
+    profiles = await discover_profiles_via_sherlock(sorted(generated), browser)
+    for profile in profiles:
+        username = profile.get("username")
+        if username:
+            generated.add(str(username).strip().lower())
+    return sorted(generated)

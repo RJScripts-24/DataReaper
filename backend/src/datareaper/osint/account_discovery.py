@@ -1,5 +1,12 @@
 ﻿from __future__ import annotations
 
+from datareaper.osint.collectors.holehe_runner import discover_accounts_via_holehe
 
-def discover_accounts(seed: str) -> list[str]:
-    return ["GitHub", "LinkedIn", "Twitter"] if "@" in seed else ["Telegram", "WhatsApp"]
+
+async def discover_accounts(seed: str) -> list[dict]:
+    """
+    Route the seed to the appropriate discovery module.
+    """
+    if "@" in seed:
+        return await discover_accounts_via_holehe(seed)
+    return []
