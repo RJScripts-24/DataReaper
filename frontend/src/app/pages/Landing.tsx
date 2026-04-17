@@ -6,12 +6,12 @@ import { PrivacyEngineSection } from "../components/PrivacyEngineSection";
 import { ProcessFlowSection } from "../components/ProcessFlowSection";
 import { FinalCTASection } from "../components/FinalCTASection";
 import { Footer } from "../components/Footer";
-import { FloatingPencil } from "../components/FloatingPencil";
+import { PressureFilter } from "../components/PressureFilter";
 
 export default function Landing() {
   return (
-    <div className="min-h-screen" style={{ fontFamily: "Inter, sans-serif" }}>
-      <FloatingPencil />
+    <div className="min-h-screen">
+      <PressureFilter />
       <Navbar />
       <HeroSection />
       <ProblemSection />

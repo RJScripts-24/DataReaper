@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { PressureText } from "./PressureText";
 
 export function ProblemSection() {
   const drawLine = {
@@ -34,28 +35,34 @@ export function ProblemSection() {
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.7 }}
           >
-            <h2
-              className="pencil-heading"
+            <PressureText
+              as="h2"
+              variant="strong"
+              className="paper-text"
               style={{
+                fontFamily: "'Dancing Script', cursive",
                 fontSize: "clamp(2rem, 4.5vw, 3rem)",
                 fontWeight: 700,
                 lineHeight: 1.1,
                 letterSpacing: "-0.02em",
-                marginBottom: "32px"
+                marginBottom: "32px",
+                display: "block"
               }}
             >
               Brokers profit off your info. <br/> Opting out is a nightmare.
-            </h2>
+            </PressureText>
             <div className="hand-drawn-border" style={{ padding: "24px", marginBottom: "32px", backgroundColor: "rgba(255,255,255,0.4)" }}>
-              <h3 className="pencil-heading" style={{ fontSize: "1.5rem", marginBottom: "16px", color: "#6360D8" }}>⚠️ The Problem</h3>
-              <p className="pencil-text" style={{ fontSize: "18px", lineHeight: 1.6, fontWeight: 400 }}>
+              <PressureText as="h3" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "1.8rem", marginBottom: "16px", color: "#6360D8", display: "block" }}>
+                ⚠️ The Problem
+              </PressureText>
+              <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "20px", lineHeight: 1.4, fontWeight: 400 }}>
                 Data brokers constantly scrape, compile, and sell deeply personal information. For the average user, reclaiming this data is a logistical nightmare. Manually tracking down hundreds of data brokers, navigating their intentionally obfuscated opt-out processes, and sending legally binding data-deletion requests (under frameworks like GDPR or the DPDP Act) is practically a full-time job.
-              </p>
+              </PressureText>
             </div>
             
-            <p className="pencil-text" style={{ fontSize: "20px", lineHeight: 1.7, fontWeight: 500 }}>
+            <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "22px", lineHeight: 1.5, fontWeight: 500 }}>
               <span style={{ color: "#a8a5f0", fontWeight: 700 }}>DataReaper</span> tackles the massive, unregulated data broker industry by continuously scouring the web for your exposed personal information and deploying a suite of AI agents to legally mandate its deletion. From initial OSINT footprinting to fighting automated legal battles in the inbox, DataReaper reclaims your privacy without requiring human intervention.
-            </p>
+            </PressureText>
           </motion.div>
 
           {/* Animated SVG Graphic */}

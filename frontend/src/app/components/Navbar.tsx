@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import { ChevronDown, Menu, X } from "lucide-react";
+import { PressureText } from "./PressureText";
 
 export function Navbar() {
   const navigate = useNavigate();
@@ -47,31 +48,23 @@ export function Navbar() {
             <circle cx="15" cy="15" r="7" stroke="#2b2b2b" strokeWidth="1" opacity="0.5" />
             <circle cx="15" cy="15" r="2.5" fill="#2b2b2b" />
           </svg>
-          <span
-            className="pencil-heading"
+          <PressureText
+            as="span"
+            variant="strong"
+            className="paper-text"
             style={{
-              fontSize: "22px",
+              fontFamily: "'Dancing Script', cursive",
+              fontSize: "24px",
               fontWeight: 700,
               letterSpacing: "-0.01em",
             }}
           >
             DataReaper
-          </span>
+          </PressureText>
           {/* Status badge */}
-          <span
-            className="pencil-text"
-            style={{
-              fontSize: "14px",
-              fontWeight: 500,
-              color: "#2b2b2b",
-              border: "1px solid #2b2b2b",
-              borderRadius: "255px 15px 225px 15px/15px 225px 15px 255px",
-              padding: "3px 10px",
-              whiteSpace: "nowrap",
-            }}
-          >
-            System Online
-          </span>
+            <PressureText as="span" variant="lite" className="paper-text" style={{ fontFamily: "'Patrick Hand', cursive", fontSize: "14px", fontWeight: 500, border: "1px solid #2b2b2b", borderRadius: "255px 15px 225px 15px/15px 225px 15px 255px", padding: "3px 10px", whiteSpace: "nowrap" }}>
+              System Online
+            </PressureText>
         </div>
 
         {/* Center: Nav links */}
@@ -81,48 +74,27 @@ export function Navbar() {
         >
           <a
             href="#engine"
-            className="pencil-text"
-            style={{
-              fontSize: "18px",
-              textDecoration: "none",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              transition: "opacity 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.6")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            style={{ textDecoration: "none" }}
           >
-            Pivot Engine <ChevronDown size={14} strokeWidth={1.5} />
+            <PressureText variant="medium" className="paper-text" style={{ fontSize: "18px", fontFamily: "'Patrick Hand', cursive", display: "flex", alignItems: "center", gap: "4px" }}>
+              Pivot Engine <ChevronDown size={14} strokeWidth={1.5} />
+            </PressureText>
           </a>
           <a
             href="#agents"
-            className="pencil-text"
-            style={{
-              fontSize: "18px",
-              textDecoration: "none",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              transition: "opacity 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.6")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            style={{ textDecoration: "none" }}
           >
-            Multi-Agent <ChevronDown size={14} strokeWidth={1.5} />
+            <PressureText variant="medium" className="paper-text" style={{ fontSize: "18px", fontFamily: "'Patrick Hand', cursive", display: "flex", alignItems: "center", gap: "4px" }}>
+              Multi-Agent <ChevronDown size={14} strokeWidth={1.5} />
+            </PressureText>
           </a>
           <a
             href="#dashboard"
-            className="pencil-text"
-            style={{
-              fontSize: "18px",
-              textDecoration: "none",
-              transition: "opacity 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.6")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            style={{ textDecoration: "none" }}
           >
-            Dashboard
+            <PressureText variant="medium" className="paper-text" style={{ fontSize: "18px", fontFamily: "'Patrick Hand', cursive" }}>
+              Dashboard
+            </PressureText>
           </a>
         </div>
 
@@ -136,7 +108,9 @@ export function Navbar() {
             cursor: "pointer",
           }}
         >
-          Initialize Screening
+          <PressureText variant="medium" className="paper-text" style={{ fontFamily: "'Patrick Hand', cursive" }}>
+            Initialize Screening
+          </PressureText>
         </button>
 
         {/* Mobile hamburger */}

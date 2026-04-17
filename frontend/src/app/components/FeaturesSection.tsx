@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { PressureText } from "./PressureText";
 
 export function FeaturesSection() {
   const dashboardFeatures = [
@@ -60,16 +61,29 @@ export function FeaturesSection() {
         
         {/* Top Segment: Dashboard */}
         <div style={{ marginBottom: "100px" }}>
-          <motion.h2 
+          <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="pencil-heading" 
-            style={{ fontSize: "clamp(2.5rem, 5vw, 3.5rem)", fontWeight: 700, lineHeight: 1.1, marginBottom: "40px", textAlign: "center" }}
+            className="text-center mb-10"
           >
-            🖥️ The <span style={{ color: "#a8a5f0" }}>"Privacy Shield"</span> Dashboard
-          </motion.h2>
+            <PressureText
+              as="h2"
+              variant="strong"
+              className="paper-text"
+              style={{
+                fontFamily: "'Dancing Script', cursive",
+                fontSize: "clamp(2.5rem, 5vw, 3.5rem)",
+                fontWeight: 700,
+                lineHeight: 1.1,
+                marginBottom: "40px",
+                display: "block"
+              }}
+            >
+              🖥️ The <span style={{ color: "#6360D8" }}>"Privacy Shield"</span> Dashboard
+            </PressureText>
+          </motion.div>
           
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "40px" }}>
             {dashboardFeatures.map((feat, i) => (
@@ -85,8 +99,12 @@ export function FeaturesSection() {
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: "24px" }}>
                   {feat.icon}
                 </div>
-                <h3 className="pencil-heading" style={{ fontSize: "1.75rem", marginBottom: "16px" }}>{feat.title}</h3>
-                <p className="pencil-text" style={{ fontSize: "16px", lineHeight: 1.6, margin: 0 }}>{feat.description}</p>
+                <PressureText as="h3" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "1.75rem", marginBottom: "16px", display: "block" }}>
+                  {feat.title}
+                </PressureText>
+                <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "18px", lineHeight: 1.4, margin: 0 }}>
+                  {feat.description}
+                </PressureText>
               </motion.div>
             ))}
           </div>
@@ -98,27 +116,27 @@ export function FeaturesSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
-          className="pencil-fill-dark hand-drawn-border"
-          style={{ padding: "60px", borderRadius: "24px" }}
+          className="hand-drawn-border"
+          style={{ padding: "60px", borderRadius: "24px", borderTop: "2px dashed rgba(0,0,0,0.1)" }}
         >
           <div style={{ textAlign: "center", marginBottom: "40px" }}>
-            <h2 className="pencil-heading-light" style={{ fontSize: "3rem", marginBottom: "16px" }}>
+            <PressureText as="h2" variant="strong" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "3rem", marginBottom: "16px", display: "block" }}>
               100% Free / Open-Source Stack
-            </h2>
-            <p className="pencil-text-light" style={{ fontSize: "18px", maxWidth: "600px", margin: "0 auto", opacity: 0.9 }}>
+            </PressureText>
+            <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "20px", maxWidth: "600px", margin: "0 auto", opacity: 0.9 }}>
               DataReaper relies exclusively on powerful open-source agents and bypasses expensive commercial APIs through headless browsing and OSINT mechanics.
-            </p>
+            </PressureText>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "24px" }}>
             {techStack.map((item, i) => (
               <div key={i} style={{ display: "flex", flexDirection: "column", gap: "8px", borderBottom: "1px dashed rgba(255,255,255,0.2)", paddingBottom: "16px" }}>
-                <span className="pencil-heading-light" style={{ fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#a8a5f0" }}>
+                <PressureText as="span" variant="lite" className="paper-text" style={{ fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#6360D8", display: "block" }}>
                   {item.cat}
-                </span>
-                <span className="pencil-text-light" style={{ fontSize: "20px", fontWeight: 700 }}>
+                </PressureText>
+                <PressureText as="span" variant="medium" className="paper-text" style={{ fontSize: "20px", fontWeight: 700, display: "block" }}>
                   {item.tech}
-                </span>
+                </PressureText>
               </div>
             ))}
           </div>

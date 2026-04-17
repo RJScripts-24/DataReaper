@@ -1,14 +1,14 @@
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
+import { PressureText } from "./PressureText";
 
 export function HeroSection() {
   const navigate = useNavigate();
 
   return (
     <section
-      className="pencil-fill-dark hand-drawn-border"
+      className="hand-drawn-border"
       style={{
-        color: "#fdfbf7",
         overflow: "hidden",
         position: "relative",
         zIndex: 10,
@@ -46,21 +46,30 @@ export function HeroSection() {
         }}
       >
         <motion.h1
-          className="pencil-heading-light"
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
           style={{
-            fontSize: "clamp(2.1875rem, calc(-0.29412rem + 8.27vw), 5rem)",
-            fontWeight: 700,
-            lineHeight: 0.98,
-            letterSpacing: "-0.02em",
             marginBottom: "26px",
           }}
         >
-          Search.{" "}
-          <span style={{ color: "#a8a5f0" }}>Destroy.</span> Reclaim your{" "}
-          <span style={{ color: "#a8a5f0" }}>identity.</span>
+          <PressureText
+            variant="strong"
+            as="span"
+            className="paper-text"
+            style={{
+              fontFamily: "'Dancing Script', cursive",
+              fontSize: "clamp(2.1875rem, calc(-0.29412rem + 8.27vw), 5rem)",
+              fontWeight: 700,
+              lineHeight: 0.98,
+              letterSpacing: "-0.02em",
+              display: "block",
+            }}
+          >
+            Search.{" "}
+            <span style={{ color: "#a8a5f0" }}>Destroy.</span> Reclaim your{" "}
+            <span style={{ color: "#a8a5f0" }}>identity.</span>
+          </PressureText>
         </motion.h1>
 
         <motion.div
@@ -72,16 +81,19 @@ export function HeroSection() {
             margin: "0 auto",
           }}
         >
-          <p
-            className="pencil-text-light"
+          <PressureText
+            as="p"
+            variant="lite"
+            className="paper-text"
             style={{
-              fontSize: "18px",
-              lineHeight: 1.6,
+              fontFamily: "'Caveat', cursive",
+              fontSize: "22px",
+              lineHeight: 1.4,
               fontWeight: 400,
             }}
           >
             DataReaper is an autonomous, multi-agent AI system designed as your personal privacy "Search & Destroy" unit. It forces brokers to delete your data via automated legal battles.
-          </p>
+          </PressureText>
         </motion.div>
 
         {/* CTA Button */}
@@ -105,7 +117,9 @@ export function HeroSection() {
               position: "relative",
             }}
           >
-            Initialize Screening
+            <PressureText variant="medium" className="paper-text" style={{ fontFamily: "'Patrick Hand', cursive" }}>
+              Initialize Screening
+            </PressureText>
             <svg
               width="11"
               height="11"

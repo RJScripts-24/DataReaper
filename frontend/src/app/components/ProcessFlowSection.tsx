@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { PressureText } from "./PressureText";
 
 export function ProcessFlowSection() {
   const drawLine = {
@@ -69,26 +70,44 @@ export function ProcessFlowSection() {
     <section id="agents" style={{ backgroundColor: "transparent", padding: "0 24px 100px", position: "relative", zIndex: 5 }}>
       
       <div style={{ maxWidth: "1160px", margin: "0 auto", textAlign: "center", marginBottom: "60px" }}>
-        <motion.h2 
+        <PressureText
+          as="h2"
+          variant="strong"
+          className="paper-text"
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
-          className="pencil-heading" 
-          style={{ fontSize: "clamp(2.5rem, 5vw, 4rem)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em" }}
+          style={{
+            fontFamily: "'Dancing Script', cursive",
+            fontSize: "clamp(2.5rem, 5vw, 4rem)",
+            fontWeight: 700,
+            lineHeight: 1.1,
+            letterSpacing: "-0.02em",
+            display: "block"
+          }}
         >
           Multi-Agent <span style={{ color: "#25B876" }}>Architecture</span>
-        </motion.h2>
-        <motion.p 
+        </PressureText>
+        <PressureText
+          as="p"
+          variant="lite"
+          className="paper-text"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="pencil-text" 
-          style={{ fontSize: "20px", maxWidth: "700px", margin: "20px auto 0", lineHeight: 1.6 }}
+          style={{
+            fontFamily: "'Caveat', cursive",
+            fontSize: "24px",
+            maxWidth: "700px",
+            margin: "20px auto 0",
+            lineHeight: 1.4,
+            display: "block"
+          }}
         >
           The backend is powered by a robust, orchestrator-driven network of specialized LLM agents. They work autonomously to map and destroy your digital footprint.
-        </motion.p>
+        </PressureText>
       </div>
 
       <div style={{ maxWidth: "1160px", margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "40px" }}>
@@ -102,7 +121,7 @@ export function ProcessFlowSection() {
             className="hand-drawn-card"
             style={{
               padding: "40px 32px",
-              backgroundColor: agent.color,
+              backgroundColor: "rgba(255,255,255,0.4)",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -113,19 +132,19 @@ export function ProcessFlowSection() {
               {agent.svg}
             </div>
             
-            <h3 className="pencil-heading" style={{ fontSize: "2rem", marginBottom: "8px" }}>
+            <PressureText as="h3" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "2rem", marginBottom: "8px", display: "block" }}>
               {agent.title}
-            </h3>
+            </PressureText>
             
             <div style={{ backgroundColor: "rgba(255,255,255,0.6)", padding: "4px 12px", borderRadius: "100px", border: "1.5px solid #333", marginBottom: "20px" }}>
-              <span className="pencil-heading" style={{ fontSize: "16px", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              <PressureText as="span" variant="lite" className="paper-text" style={{ fontSize: "16px", letterSpacing: "0.05em", textTransform: "uppercase", display: "block" }}>
                 {agent.role}
-              </span>
+              </PressureText>
             </div>
 
-            <p className="pencil-text" style={{ fontSize: "18px", lineHeight: 1.6, fontWeight: 500, margin: 0 }}>
+            <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "20px", lineHeight: 1.4, fontWeight: 500, margin: 0 }}>
               {agent.desc}
-            </p>
+            </PressureText>
           </motion.div>
         ))}
       </div>

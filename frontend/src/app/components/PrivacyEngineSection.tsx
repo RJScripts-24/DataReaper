@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { PressureText } from "./PressureText";
 
 export function PrivacyEngineSection() {
   const drawLine = {
@@ -33,9 +34,21 @@ export function PrivacyEngineSection() {
         transition={{ duration: 0.7 }}
         style={{ maxWidth: "1160px", margin: "0 auto", padding: "120px 24px 80px", textAlign: "center" }}
       >
-        <h2 className="pencil-heading" style={{ fontSize: "clamp(2.5rem, 5vw, 4rem)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em" }}>
+        <PressureText
+          as="h2"
+          variant="strong"
+          className="paper-text"
+          style={{
+            fontFamily: "'Dancing Script', cursive",
+            fontSize: "clamp(2.5rem, 5vw, 4rem)",
+            fontWeight: 700,
+            lineHeight: 1.1,
+            letterSpacing: "-0.02em",
+            display: "block"
+          }}
+        >
           💡 The "Data Pivot" <span style={{ color: "#6360D8" }}>AI Engine</span>
-        </h2>
+        </PressureText>
       </motion.div>
 
       <div
@@ -53,9 +66,9 @@ export function PrivacyEngineSection() {
       >
         {/* Left Column: Flow Text */}
         <div style={{ padding: "56px 48px", borderRight: "2px dashed rgba(0,0,0,0.15)" }}>
-          <h3 className="pencil-heading" style={{ fontSize: "2rem", marginBottom: "32px" }}>
+          <PressureText as="h3" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "2rem", marginBottom: "32px", display: "block" }}>
             How it works:
-          </h3>
+          </PressureText>
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
             {steps.map((step, index) => (
               <motion.div 
@@ -81,10 +94,12 @@ export function PrivacyEngineSection() {
                   {index + 1}
                 </div>
                 <div>
-                  <h4 className="pencil-heading" style={{ fontSize: "1.25rem", margin: "0 0 8px 0" }}>{step.title}</h4>
-                  <p className="pencil-text" style={{ fontSize: "16px", margin: 0, opacity: 0.85, lineHeight: 1.5 }}>
+                  <PressureText as="h4" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "1.4rem", margin: "0 0 8px 0", display: "block" }}>
+                    {step.title}
+                  </PressureText>
+                  <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "18px", margin: 0, opacity: 0.85, lineHeight: 1.4 }}>
                     {step.desc}
-                  </p>
+                  </PressureText>
                 </div>
               </motion.div>
             ))}
