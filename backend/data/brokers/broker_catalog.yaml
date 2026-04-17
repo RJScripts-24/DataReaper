@@ -1,0 +1,17 @@
+﻿brokers:
+  - id: apollo
+    name: Apollo.io
+    category: b2b-intelligence
+    priority: high
+  - id: zoominfo
+    name: ZoomInfo
+    category: b2b-intelligence
+    priority: high
+  - id: spokeo
+    name: Spokeo
+    category: people-search
+    priority: high
+  - id: whitepages
+    name: Whitepages
+    category: people-search
+    priority: high
