@@ -20,7 +20,7 @@ export function Navbar() {
   return (
     <motion.nav
       className="fixed top-0 left-0 right-0 z-50"
-      style={{ padding: "12px 20px" }}
+      style={{ padding: "25px 20px" }}
     >
       <div
         className="hand-drawn-border"
@@ -31,7 +31,7 @@ export function Navbar() {
           boxShadow: isScrolled
             ? "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)"
             : "0 1px 3px rgba(0,0,0,0.05)",
-          padding: "8px 8px 8px 24px",
+          padding: "8px 24px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -39,12 +39,18 @@ export function Navbar() {
         }}
       >
         {/* Left: Logo + badge */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <svg width="28" height="28" viewBox="0 0 30 30" fill="none" style={{ filter: "url(#pencil-sketch)" }}>
-            <circle cx="15" cy="15" r="13" stroke="#2b2b2b" strokeWidth="1.5" />
-            <circle cx="15" cy="15" r="7" stroke="#2b2b2b" strokeWidth="1" opacity="0.5" />
-            <circle cx="15" cy="15" r="2.5" fill="#2b2b2b" />
-          </svg>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <img
+            src="/images/logo.png"
+            alt="DataReaper logo"
+            style={{
+              width: "104px",
+              height: "60px",
+              objectFit: "contain",
+              filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.15))",
+              flexShrink: 0,
+            }}
+          />
           <PressureText
             as="span"
             variant="strong"

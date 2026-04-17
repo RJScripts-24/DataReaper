@@ -327,7 +327,26 @@ export default function WarRoom() {
         style={{ backgroundColor: "rgba(245, 243, 239, 0.88)", borderBottom: "1.5px dashed rgba(0,0,0,0.15)" }}
       >
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center">
-          <div className="hidden md:block" />
+          <div className="flex items-center justify-center md:justify-start gap-2 cursor-pointer" onClick={() => navigate("/")}>
+            <img
+              src="/images/logo.png"
+              alt="DataReaper logo"
+              style={{
+                width: "104px",
+                height: "60px",
+                objectFit: "contain",
+                filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.15))",
+                flexShrink: 0,
+              }}
+            />
+            <PressureText
+              as="span"
+              className="text-3xl tracking-tight"
+              style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}
+            >
+              DataReaper
+            </PressureText>
+          </div>
           <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8">
             <button
               onClick={() => navigate("/command-center")}

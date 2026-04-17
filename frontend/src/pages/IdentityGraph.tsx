@@ -283,14 +283,26 @@ export default function IdentityGraph() {
         style={{ backgroundColor: "rgba(245, 243, 239, 0.8)", borderBottom: "1.5px dashed rgba(0,0,0,0.15)" }}
       >
         <div className="max-w-[1600px] w-full mx-auto flex items-center justify-between">
-          <PressureText
-            as="span"
-            className="text-3xl tracking-tight cursor-pointer"
-            style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}
-            onClick={() => navigate("/")}
-          >
-            DataReaper
-          </PressureText>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
+            <img
+              src="/images/logo.png"
+              alt="DataReaper logo"
+              style={{
+                width: "104px",
+                height: "60px",
+                objectFit: "contain",
+                filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.15))",
+                flexShrink: 0,
+              }}
+            />
+            <PressureText
+              as="span"
+              className="text-3xl tracking-tight"
+              style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}
+            >
+              DataReaper
+            </PressureText>
+          </div>
 
           <div className="hidden md:flex items-center gap-8">
             <button onClick={() => navigate("/command-center")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">Dashboard</button>
