@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8000, validation_alias=AliasChoices("APP_PORT", "API_PORT"))
     app_debug: bool = True
     app_log_level: str = "INFO"
+    app_log_format: Literal["console", "json"] = "console"
     frontend_url: str = Field(default="http://localhost:5173", validation_alias=AliasChoices("FRONTEND_URL", "APP_FRONTEND_URL"))
     app_cors_origins: list[str] = Field(
         default_factory=list,

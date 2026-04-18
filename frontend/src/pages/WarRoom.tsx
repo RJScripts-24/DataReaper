@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Clock, AlertCircle, Send, Siren } from "lucide-react";
+import { MessageSquare, Clock, AlertCircle, Send, Siren, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PressureFilter } from "../components/PressureFilter";
@@ -16,9 +16,11 @@ import {
   useEscalateEngagementMutation,
   useScanStatusQuery,
 } from "../lib/hooks";
-import { type EngagementStatus } from "../lib/api";
+import { resumeAgent, type EngagementStatus } from "../lib/api";
 import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { useRealtimeSubscription, type RealtimeConnectionStatus } from "../lib/wsClient";
+import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { type AgentEvent } from "../types/ws";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -33,6 +35,11 @@ const COLORS = {
 };
 
 type Classification = "Violation" | "Delay" | "Warning" | "Progress" | "Resolved";
+
+type CaptchaBlockState = {
+  broker: string;
+  type: string;
+};
 
 function getStatusColor(status: string) {
   switch (status) {
@@ -230,6 +237,8 @@ export default function WarRoom() {
   const [selectedEngagementId, setSelectedEngagementId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [escalationNote, setEscalationNote] = useState("Non-compliant response pattern detected.");
+  const [captchaBlock, setCaptchaBlock] = useState<CaptchaBlockState | null>(null);
+  const [resumePending, setResumePending] = useState(false);
 
   const statusesFilter = useMemo(
     () => (selectedStatusFilter === "all" ? undefined : [selectedStatusFilter]),
@@ -266,6 +275,25 @@ export default function WarRoom() {
         return;
       }
 
+      const payload = event.payload as Record<string, unknown>;
+      if (event.event === "captcha_block") {
+        const broker = typeof payload.broker === "string" ? payload.broker : "Unknown broker";
+        const type = typeof payload.type === "string" ? payload.type : "unknown";
+        const agentEvent: AgentEvent = { event: "captcha_block", broker, type };
+        setCaptchaBlock({ broker: agentEvent.broker, type: agentEvent.type });
+        setResumePending(false);
+        return;
+      }
+
+      if (event.event === "agent_resumed") {
+        const agentEvent: AgentEvent = { event: "agent_resumed" };
+        if (agentEvent.event === "agent_resumed") {
+          setCaptchaBlock(null);
+          setResumePending(false);
+          toast.success("Sleuth Agent resumed.");
+        }
+      }
+
       void queryClient.invalidateQueries({ queryKey: dataReaperQueryKeys.engagements(scanId, statusesFilter) });
 
       if (selectedEngagementId) {
@@ -278,6 +306,20 @@ export default function WarRoom() {
       }
     },
   });
+
+  const handleResumeAgent = async () => {
+    if (!scanId || resumePending) {
+      return;
+    }
+    try {
+      setResumePending(true);
+      await resumeAgent(scanId);
+      toast.success("Resume signal sent. Waiting for agent confirmation...");
+    } catch (error) {
+      setResumePending(false);
+      toast.error(error instanceof Error ? error.message : "Failed to resume agent.");
+    }
+  };
 
   if (!scanId) {
     return null;
@@ -332,6 +374,28 @@ export default function WarRoom() {
     <div className="min-h-screen relative w-full overflow-x-hidden" style={{ backgroundColor: COLORS.bg }}>
       <PressureFilter />
       <ConnectionBanner status={realtimeStatus} />
+
+      {captchaBlock && (
+        <div className="mx-auto max-w-[1600px] px-4 md:px-8 lg:px-12 pt-3">
+          <Alert variant="destructive" className="border border-red-700 bg-red-50 text-red-900">
+            <AlertTitle>Sleuth Agent Blocked - Manual CAPTCHA Required on {captchaBlock.broker}</AlertTitle>
+            <AlertDescription>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>Detected challenge type: {captchaBlock.type}</span>
+                <button
+                  type="button"
+                  className="hand-drawn-button px-3 py-1.5 flex items-center gap-2"
+                  onClick={() => void handleResumeAgent()}
+                  disabled={resumePending}
+                >
+                  {resumePending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {resumePending ? "Waiting for agent_resumed..." : "Resume Agent"}
+                </button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       <nav
         className="sticky top-0 z-50 px-4 md:px-8 lg:px-12 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 backdrop-blur-sm"

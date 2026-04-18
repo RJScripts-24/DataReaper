@@ -15,7 +15,7 @@ from datareaper.db.session import engine
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    configure_logging(settings.app_log_level)
+    configure_logging(settings.app_log_level, settings.app_log_format)
     if settings.app_auto_create_tables and engine is not None:
         await _create_tables(engine)
     yield

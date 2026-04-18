@@ -158,3 +158,8 @@ export async function createRealtimeConnection(
   const { data } = await apiClient.post<CreateRealtimeConnectionResponse>("/v1/realtime/connection", payload);
   return data;
 }
+
+export async function resumeAgent(scanId: string): Promise<{ status: string }> {
+  const { data } = await apiClient.post<{ status: string }>("/api/agent/resume", { scanId });
+  return data;
+}

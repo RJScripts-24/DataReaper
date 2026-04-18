@@ -11,7 +11,8 @@ from fastapi.responses import JSONResponse
 
 from datareaper.api.deps import DbSession, get_onboarding_service
 from datareaper.core.config import get_settings
-from datareaper.core.exceptions import ResourceNotFoundError
+from datareaper.core.exceptions import DataReaperError, InvalidSeedError, ResourceNotFoundError
+from datareaper.core.logging import get_logger
 from datareaper.db.in_memory import memory_store
 from datareaper.db.models.broker_case import BrokerCase
 from datareaper.db.repositories.dashboard_repo import DashboardRepository
@@ -56,6 +57,7 @@ from datareaper.schemas.api_v1 import (
 from datareaper.services.onboarding_service import OnboardingService
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 _SCAN_REPO = ScanRepository()
 _DASHBOARD_REPO = DashboardRepository()
@@ -66,6 +68,13 @@ T = TypeVar("T")
 
 
 def _api_error(status_code: int, code: str, message: str, details: list[dict[str, Any]] | None = None) -> JSONResponse:
+    logger.warning(
+        "api_contract_error_response",
+        status_code=status_code,
+        code=code,
+        message=message,
+        details_count=len(details or []),
+    )
     payload = ApiError(code=code, message=message, details=details)
     return JSONResponse(status_code=status_code, content=payload.model_dump(mode="json", exclude_none=True))
 
@@ -202,9 +211,15 @@ async def create_scan(
     db: DbSession,
     service: OnboardingService = Depends(get_onboarding_service),
 ):
+    logger.info(
+        "create_scan_requested",
+        seed_type=payload.seed.type,
+        jurisdiction_hint=payload.jurisdictionHint,
+    )
     try:
         active_scan_ids = await _SCAN_REPO.list_active_scan_ids(db)
-    except Exception:
+    except Exception as exc:
+        logger.warning("active_scan_check_failed", error=str(exc))
         active_scan_ids = []
 
     if active_scan_ids:
@@ -219,9 +234,29 @@ async def create_scan(
             seed_type=payload.seed.type,
             jurisdiction=jurisdiction,
         )
-    except ValueError as exc:
+    except (ValueError, InvalidSeedError) as exc:
+        logger.warning(
+            "create_scan_invalid_seed",
+            seed_type=payload.seed.type,
+            jurisdiction=jurisdiction,
+            error=str(exc),
+        )
         return _api_error(400, "invalid_seed", str(exc))
+    except DataReaperError as exc:
+        logger.warning(
+            "create_scan_domain_error",
+            seed_type=payload.seed.type,
+            jurisdiction=jurisdiction,
+            error=str(exc),
+        )
+        return _api_error(400, "scan_create_failed", str(exc))
     except Exception as exc:
+        logger.exception(
+            "create_scan_failed",
+            seed_type=payload.seed.type,
+            jurisdiction=jurisdiction,
+            error=str(exc),
+        )
         return _api_error(400, "scan_create_failed", str(exc))
 
     now = _now_utc()

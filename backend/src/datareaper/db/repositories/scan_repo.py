@@ -23,7 +23,7 @@ from datareaper.db.models.scan_job import ScanJob
 from datareaper.db.models.scan_stage import ScanStage
 from datareaper.db.models.seed import Seed
 
-TERMINAL_SCAN_STATUSES = {"completed", "resolved", "failed", "cancelled"}
+TERMINAL_SCAN_STATUSES = {"completed", "resolved", "failed", "cancelled", "active"}
 
 
 def _is_active_scan_status(status: str | None) -> bool:
@@ -121,7 +121,7 @@ class ScanRepository:
                     scan_job_id=scan["id"],
                     source_node_key=edge["source"],
                     target_node_key=edge["target"],
-                    relationship=edge["relationship"],
+                    relationship=edge.get("relationship") or "related_to",
                 )
             )
 
@@ -369,7 +369,7 @@ class ScanRepository:
                     {
                         "source": row.source_node_key,
                         "target": row.target_node_key,
-                        "relationship": row.relationship,
+                        "relationship": row.relationship or "related_to",
                     }
                     for row in edge_rows
                 ],
