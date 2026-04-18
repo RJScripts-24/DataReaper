@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { PressureFilter } from "../components/PressureFilter";
 import { PressureText } from "../components/PressureText";
 import { AnimatedDataReaperLogo } from "../components/AnimatedDataReaperLogo";
+import { ApiClientError } from "../lib/apiClient";
+import apiClient from "../lib/apiClient";
 import { stopScan } from "../lib/api";
 import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { type RealtimeConnectionStatus } from "../lib/wsClient";
@@ -339,7 +341,7 @@ function ProgressPill({ percent, status }: { percent: number; status: string }) 
 
 export default function CommandCenter() {
   const navigate = useNavigate();
-  const { clearActiveScan } = useScanContext();
+  const { setActiveScan } = useScanContext();
   const scanId = useRequireScan();
   const scanQuery = useScanStatusQuery(scanId);
   const engagementsQuery = useEngagementsQuery(scanId);
@@ -348,6 +350,7 @@ export default function CommandCenter() {
   const [isFeedExpanded, setIsFeedExpanded] = useState(false);
   const [hoveredRadarDotId, setHoveredRadarDotId] = useState<string | null>(null);
   const [isStoppingScan, setIsStoppingScan] = useState(false);
+  const [isStartingNewScan, setIsStartingNewScan] = useState(false);
   const [isStopped, setIsStopped] = useState(false);
   const [displayProgress, setDisplayProgress] = useState(0);
   const { state, connectionStatus, hasError, refetch } = useDashboard(scanId);
@@ -360,10 +363,18 @@ export default function CommandCenter() {
   }, [scanId]);
 
   useEffect(() => {
-    if (state.activityFeed.some((entry) => entry.type === "scan_stopped")) {
-      setIsStopped(true);
+    const status = String(scanQuery.data?.status ?? "").trim().toLowerCase();
+    if (!status) {
+      return;
     }
-  }, [state.activityFeed]);
+
+    if (status === "cancelled" || status === "stopped") {
+      setIsStopped(true);
+      return;
+    }
+
+    setIsStopped(false);
+  }, [scanQuery.data?.status]);
 
   useEffect(() => {
     if (!hasError) {
@@ -810,14 +821,57 @@ export default function CommandCenter() {
             <button
               type="button"
               className="hand-drawn-button px-3 py-2"
-              onClick={() => {
-                clearActiveScan();
-                navigate("/onboarding");
+              disabled={isStartingNewScan}
+              onClick={async () => {
+                if (isStartingNewScan) {
+                  return;
+                }
+
+                const currentSeed = scanQuery.data?.seed;
+                const seedValue = String(currentSeed?.value ?? "").trim();
+                if (!seedValue) {
+                  toast.error("Current scan seed is unavailable. Start a new scan from onboarding.");
+                  return;
+                }
+
+                try {
+                  setIsStartingNewScan(true);
+                  setIsStopped(false);
+
+                  const response = await apiClient.post<{
+                    scan_id: string;
+                    status: string;
+                  }>("/api/onboarding/initialize", {
+                    seeds: [seedValue],
+                    seed_type: currentSeed?.type ?? "auto",
+                    jurisdiction: "DPDP",
+                    consent_confirmed: true,
+                  });
+
+                  const nextScanId = String(response.data?.scan_id ?? "").trim();
+                  if (!nextScanId) {
+                    throw new Error("Scan initialization did not return a scan ID.");
+                  }
+
+                  setActiveScan(nextScanId);
+                  await Promise.all([scanQuery.refetch(), refetch()]);
+                  toast.success("New scan started.");
+                } catch (error) {
+                  const message =
+                    error instanceof ApiClientError
+                      ? error.message
+                      : error instanceof Error
+                        ? error.message
+                        : "Failed to start a new scan.";
+                  toast.error(message);
+                } finally {
+                  setIsStartingNewScan(false);
+                }
               }}
               data-reaper-expression="happy"
               data-reaper-phrases="A new target? I'm always hungry for more.||Let's fire up a fresh sequence.||Resetting coordinates for a new hunt."
             >
-              Start New Scan
+              {isStartingNewScan ? "Starting..." : "Start New Scan"}
             </button>
           </div>
         </div>
