@@ -148,6 +148,26 @@ export default function Onboarding() {
                 </PressureText>
 
                 <div className="mb-8 relative group">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <span
+                      className="text-sm uppercase tracking-[0.18em]"
+                      style={{
+                        fontFamily: "'Patrick Hand', cursive",
+                        color: "rgba(31, 31, 31, 0.72)",
+                      }}
+                    >
+                      Primary seed
+                    </span>
+                    <span
+                      className="text-sm"
+                      style={{
+                        fontFamily: "'Patrick Hand', cursive",
+                        color: "rgba(31, 31, 31, 0.58)",
+                      }}
+                    >
+                      Use one email or one phone number
+                    </span>
+                  </div>
                   <PressureInput
                     type="text"
                     value={input}
@@ -162,12 +182,14 @@ export default function Onboarding() {
                       if (e.key === "Enter") handleInitialize();
                     }}
                     placeholder="Email or Phone Number"
-                    className="w-full bg-transparent border-none pb-4 text-4xl outline-none paper-text"
+                    className="w-full bg-transparent border-none pb-4 text-[2rem] leading-tight outline-none"
                     style={{
-                      fontFamily: "'Dancing Script', cursive",
+                      color: "#1f1f1f",
                       borderBottom: "2px solid #2b2b2b",
-                      filter: "url(#pencil-sketch)",
-                      paddingLeft: "4px"
+                      paddingLeft: "4px",
+                      paddingRight: "4px",
+                      letterSpacing: "0.01em",
+                      textShadow: "none",
                     }}
                     data-reaper-expression="thinking"
                     data-reaper-phrases="Searching for digital rot...||Type carefully, Operative.||I'm ready to track this down.||Enter your target lead."
@@ -189,11 +211,18 @@ export default function Onboarding() {
                             initial={{ opacity: 0, y: 3 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="paper-text text-xl"
-                            style={{ fontFamily: "'Patrick Hand', cursive", color: "#d7dcf3" }}
+                            className="text-lg md:text-xl leading-relaxed"
+                            style={{
+                              fontFamily: "'Patrick Hand', cursive",
+                              color: "#edf1ff",
+                              textShadow: "none",
+                              mixBlendMode: "normal",
+                              opacity: 1,
+                              display: "block",
+                            }}
                           >
                             {line}
-                            {isCurrentLine && <span className="terminal-cursor ml-1">█</span>}
+                            {isCurrentLine && <span className="terminal-cursor ml-1">|</span>}
                           </motion.p>
                         );
                       })}
@@ -304,8 +333,8 @@ export default function Onboarding() {
         
         input::placeholder {
           font-family: 'Patrick Hand', cursive;
-          opacity: 0.4;
-          color: #2b2b2b;
+          opacity: 1;
+          color: rgba(31, 31, 31, 0.42);
         }
 
         .pencil-fill-dark {

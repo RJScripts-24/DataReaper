@@ -13,6 +13,17 @@ from datareaper.db.repositories.scan_repo import ScanRepository
 from datareaper.db.session import SessionLocal
 
 
+def _normalize_case_status(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"resolved", "success"}:
+        return "resolved"
+    if normalized in {"illegal", "illegal_pushback", "legal_violation"}:
+        return "illegal"
+    if normalized in {"stalling", "irrelevant"}:
+        return "stalling"
+    return "in-progress"
+
+
 def _is_gmail_thread_id(thread_id: str | None) -> bool:
     if not thread_id:
         return False
@@ -227,7 +238,7 @@ class BattleRepository:
                     if thread is not None:
                         case = await session.get(BrokerCase, thread.broker_case_id)
                         if case is not None:
-                            case.status = status
+                            case.status = _normalize_case_status(status)
                         await session.commit()
                         return
             except Exception:
@@ -236,5 +247,5 @@ class BattleRepository:
         for scan_bundle in memory_store._scans.values():  # noqa: SLF001
             for thread in scan_bundle.get("threads", {}).values():
                 if thread.get("thread_id") == thread_id:
-                    thread["status"] = status
+                    thread["status"] = _normalize_case_status(status)
                     return

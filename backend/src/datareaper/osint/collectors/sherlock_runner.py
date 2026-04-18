@@ -3,7 +3,9 @@
 import asyncio
 from urllib.parse import urlparse
 
+from datareaper.core.config import get_settings
 from datareaper.integrations.browser.playwright_client import PlaywrightClient
+from datareaper.integrations.maigret.adapter import run_maigret
 from datareaper.integrations.sherlock.adapter import run_sherlock
 
 _NEGATIVE_MARKERS: dict[str, tuple[str, ...]] = {
@@ -75,30 +77,65 @@ async def _is_likely_live_profile(browser: PlaywrightClient, row: dict) -> bool:
 
 
 async def discover_profiles_via_sherlock(usernames: list[str], browser: PlaywrightClient) -> list[dict]:
+    return await discover_profiles_via_username_tools(usernames, browser)
+
+
+async def discover_profiles_via_username_tools(
+    usernames: list[str],
+    browser: PlaywrightClient | None = None,
+) -> list[dict]:
     if not usernames:
         return []
 
-    runs = await asyncio.gather(
-        *[run_sherlock(username) for username in usernames],
-        return_exceptions=True,
-    )
+    settings = get_settings()
+    maigret_runs: list[object]
+    if settings.osint_enable_maigret:
+        maigret_runs = await asyncio.gather(
+            *[
+                run_maigret(
+                    username,
+                    top_sites=settings.osint_maigret_top_sites,
+                    max_connections=settings.osint_maigret_max_connections,
+                )
+                for username in usernames
+            ],
+            return_exceptions=True,
+        )
+    else:
+        maigret_runs = [[] for _ in usernames]
+
+    should_use_sherlock_fallback = browser is not None or not settings.osint_enable_maigret
+    if should_use_sherlock_fallback:
+        sherlock_runs = await asyncio.gather(
+            *[run_sherlock(username) for username in usernames],
+            return_exceptions=True,
+        )
+    else:
+        sherlock_runs = [[] for _ in usernames]
 
     deduped: dict[str, dict] = {}
-    for username, result in zip(usernames, runs, strict=False):
-        if isinstance(result, Exception):
-            continue
-        for row in result:
-            url = str(row.get("url") or "").strip()
-            if not url:
+    for index, username in enumerate(usernames):
+        maigret_result = maigret_runs[index] if index < len(maigret_runs) else []
+        sherlock_result = sherlock_runs[index] if index < len(sherlock_runs) else []
+
+        for result in (maigret_result, sherlock_result):
+            if isinstance(result, Exception):
                 continue
-            deduped[url] = {
-                "site": row.get("site"),
-                "url": url,
-                "username": username,
-            }
+            for row in result:
+                url = str(row.get("url") or "").strip()
+                if not url:
+                    continue
+                deduped[url] = {
+                    "site": row.get("site"),
+                    "url": url,
+                    "username": username,
+                }
 
     if not deduped:
         return []
+
+    if browser is None:
+        return list(deduped.values())
 
     checks = await asyncio.gather(
         *[_is_likely_live_profile(browser, row) for row in deduped.values()],

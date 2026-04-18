@@ -16,7 +16,7 @@ from datareaper.core.exceptions import DataReaperError, InvalidSeedError, Resour
 from datareaper.core.logging import get_logger
 from datareaper.db.in_memory import memory_store
 from datareaper.db.models.broker_case import BrokerCase
-from datareaper.db.repositories.dashboard_repo import DashboardRepository
+from datareaper.db.repositories.dashboard_repo import DashboardRepository, build_live_agent_statuses
 from datareaper.db.repositories.scan_repo import ScanRepository
 from datareaper.schemas.api_v1 import (
     ActivityLog,
@@ -136,12 +136,23 @@ def _threat_type_from_target(target: dict[str, Any], index: int) -> str:
 
 
 def _radar_status_from_engagement(status: str) -> str:
-    normalized = status.lower()
+    normalized = _engagement_status(status)
     if normalized == "resolved":
         return "Identified"
     if normalized == "illegal":
         return "Deletion in progress"
     return "Scanning"
+
+
+def _engagement_status(status: str | None) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized in {"resolved", "success"}:
+        return "resolved"
+    if normalized in {"illegal", "illegal_pushback", "legal_violation"}:
+        return "illegal"
+    if normalized in {"stalling", "irrelevant"}:
+        return "stalling"
+    return "in-progress"
 
 
 def _activity_color(activity_type: str) -> str:
@@ -188,6 +199,121 @@ def _trend_from_value(value: int) -> list[int]:
     trend = [max(0, base - step * (7 - idx)) for idx in range(8)]
     trend[-1] = base
     return trend
+
+
+def _fallback_identity_graph(bundle: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    scan = dict(bundle.get("scan") or {})
+    seed_value = str(scan.get("normalized_seed") or "seed")
+    raw_accounts = [str(item).strip() for item in (bundle.get("accounts") or []) if str(item).strip()]
+    raw_usernames = [str(item).strip() for item in (bundle.get("usernames") or []) if str(item).strip()]
+    raw_targets = [str(item.get("brokerName") or "").strip() for item in (bundle.get("targets") or []) if isinstance(item, dict)]
+    identity = dict(bundle.get("identity") or {})
+
+    accounts = list(dict.fromkeys(raw_accounts))[:6]
+    usernames = list(dict.fromkeys(raw_usernames))[:6]
+    targets = list(dict.fromkeys(raw_targets))[:8]
+    identity_name = str(identity.get("real_name") or identity.get("name") or seed_value).strip()
+    identity_location = str(identity.get("location") or "").strip()
+
+    nodes: list[dict[str, Any]] = [
+        {
+            "id": "seed",
+            "type": "seed",
+            "label": seed_value,
+            "x": 400,
+            "y": 140,
+            "data": {"value": seed_value, "details": ["Primary input seed"]},
+        }
+    ]
+    edges: list[dict[str, Any]] = []
+
+    for index, account in enumerate(accounts, start=1):
+        node_id = f"platform_{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "platform",
+                "label": account,
+                "x": 140 + ((index - 1) * 110),
+                "y": 255,
+                "data": {"platform": account, "value": account},
+            }
+        )
+        edges.append({"source": "seed", "target": node_id, "relationship": "pivoted_to"})
+
+    for index, username in enumerate(usernames, start=1):
+        node_id = f"username_{index}"
+        platform_ref = f"platform_{min(index, max(len(accounts), 1))}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "username",
+                "label": username,
+                "x": 140 + ((index - 1) * 110),
+                "y": 360,
+                "data": {"value": username},
+            }
+        )
+        edges.append(
+            {
+                "source": platform_ref if accounts else "seed",
+                "target": node_id,
+                "relationship": "discovered_username",
+            }
+        )
+
+    nodes.append(
+        {
+            "id": "identity_name",
+            "type": "identity",
+            "label": identity_name,
+            "x": 290,
+            "y": 470,
+            "data": {"value": identity_name, "details": ["Resolved identity"]},
+        }
+    )
+    edges.append(
+        {
+            "source": f"username_{1}" if usernames else "seed",
+            "target": "identity_name",
+            "relationship": "resolved_identity",
+        }
+    )
+
+    if identity_location:
+        nodes.append(
+            {
+                "id": "identity_location",
+                "type": "identity",
+                "label": identity_location,
+                "x": 510,
+                "y": 470,
+                "data": {"value": identity_location, "details": ["Resolved location"]},
+            }
+        )
+        edges.append(
+            {
+                "source": "identity_name",
+                "target": "identity_location",
+                "relationship": "correlates_with",
+            }
+        )
+
+    for index, broker_name in enumerate(targets, start=1):
+        node_id = f"target_{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "target",
+                "label": broker_name,
+                "x": 120 + ((index - 1) * 90),
+                "y": 585,
+                "data": {"status": "Discovered broker target", "details": ["Matched from live scan results"]},
+            }
+        )
+        edges.append({"source": "identity_name", "target": node_id, "relationship": "found_on_broker"})
+
+    return {"nodes": nodes, "edges": edges}
 
 
 def _message_metadata(raw: dict[str, Any] | None) -> MessageMetadata | None:
@@ -428,13 +554,13 @@ async def get_dashboard_agents(scanId: str, db: DbSession):
 
     agents = [
         AgentStatus(
-            name=str(agent.get("agent_name", "Agent")),
-            mode=_agent_mode(str(agent.get("agent_name", "Agent"))),
+            name=str(agent.get("name", "Agent")),
+            mode=_agent_mode(str(agent.get("name", "Agent"))),
             status=str(agent.get("status", "active")).title(),
             task=str(agent.get("detail", "Processing")),
             progress=min(100, 25 + idx * 25),
         )
-        for idx, agent in enumerate(bundle.get("agent_runs", []))
+        for idx, agent in enumerate(build_live_agent_statuses(bundle))
     ]
 
     return AgentStatusesResponse(scanId=scanId, agents=agents)
@@ -490,8 +616,50 @@ async def get_identity_graph(
     except ResourceNotFoundError:
         return _api_error(404, "scan_not_found", f"Scan '{scanId}' was not found.")
 
-    all_nodes = bundle.get("graph", {}).get("nodes", [])
-    all_edges = bundle.get("graph", {}).get("edges", [])
+    graph_payload = dict(bundle.get("graph") or {})
+    all_nodes = list(graph_payload.get("nodes") or [])
+    all_edges = list(graph_payload.get("edges") or [])
+    if len(all_nodes) <= 1:
+        fallback_graph = _fallback_identity_graph(bundle)
+        all_nodes = fallback_graph["nodes"]
+        all_edges = fallback_graph["edges"]
+
+    target_names = {
+        str(target.get("brokerName") or "").strip()
+        for target in (bundle.get("targets") or [])
+        if isinstance(target, dict) and str(target.get("brokerName") or "").strip()
+    }
+    if target_names:
+        all_nodes = [
+            node
+            for node in all_nodes
+            if str(node.get("type") or "") != "target" or str(node.get("label") or "").strip() in target_names
+        ]
+    else:
+        all_nodes = [node for node in all_nodes if str(node.get("type") or "") != "target"]
+
+    existing_target_labels = {
+        str(node.get("label") or "").strip()
+        for node in all_nodes
+        if str(node.get("type") or "") == "target"
+    }
+    identity_anchor = next(
+        (str(node.get("id") or "") for node in all_nodes if str(node.get("type") or "") == "identity"),
+        "seed",
+    )
+    for index, broker_name in enumerate(sorted(target_names - existing_target_labels), start=1):
+        node_id = f"target_dynamic_{index}"
+        all_nodes.append(
+            {
+                "id": node_id,
+                "type": "target",
+                "label": broker_name,
+                "x": 140 + ((index - 1) * 90),
+                "y": 585,
+                "data": {"status": "Discovered broker target", "details": ["Matched from live scan results"]},
+            }
+        )
+        all_edges.append({"source": identity_anchor or "seed", "target": node_id, "relationship": "found_on_broker"})
 
     def include_node(node_type: str) -> bool:
         if node_type == "platform":
@@ -576,7 +744,7 @@ async def list_engagements(
         EngagementSummary(
             id=str(target.get("id")),
             brokerName=str(target.get("brokerName", "Unknown Broker")),
-            status=str(target.get("status", "stalling")),
+            status=_engagement_status(str(target.get("status", "stalling"))),
             lastActivity=str(target.get("lastActivity", "unknown")),
             messageCount=int(target.get("messageCount", 0))
             + len(_MANUAL_MESSAGES.get((scanId, str(target.get("id"))), [])),
@@ -628,7 +796,7 @@ async def get_engagement(scanId: str, engagementId: str, db: DbSession):
     return EngagementDetail(
         id=str(target.get("id")),
         brokerName=str(target.get("brokerName", "Unknown Broker")),
-        status=str(target.get("status", "stalling")),
+        status=_engagement_status(str(target.get("status", "stalling"))),
         lastActivity=str(target.get("lastActivity", "unknown")),
         messageCount=int(target.get("messageCount", len(messages))),
         conversation=messages,

@@ -17,6 +17,7 @@ from datareaper.osint.collectors.paste_site_search import search_paste_sites
 from datareaper.osint.collectors.platform_prober import probe_usernames
 from datareaper.osint.collectors.profile_scraper import is_profile_candidate_url, scrape_profile
 from datareaper.osint.collectors.search_probe import build_search_queries, search_public_web
+from datareaper.osint.collectors.sherlock_runner import discover_profiles_via_username_tools
 from datareaper.osint.graph_builder import build_graph
 from datareaper.osint.identity_resolver import resolve_identity
 from datareaper.osint.username_discovery import discover_usernames, is_plausible_username
@@ -24,7 +25,7 @@ from datareaper.realtime.channels import DASHBOARD_CHANNEL
 from datareaper.realtime.publishers import publish
 
 logger = get_logger(__name__)
-DEFAULT_TARGETS = ["Apollo.io", "Spokeo", "Whitepages"]
+DEFAULT_TARGETS: list[str] = []
 SiteFoundCallback = Callable[[dict], Awaitable[None] | None]
 ShouldStopCallback = Callable[[], Awaitable[bool] | bool]
 
@@ -35,7 +36,7 @@ def _add_username(container: set[str], value: str | None) -> None:
         container.add(candidate)
 
 
-async def _run_health_check(browser: PlaywrightClient) -> dict[str, bool]:
+async def _run_health_check(browser: PlaywrightClient | None) -> dict[str, bool]:
     """Quick transport sanity checks to separate network, bot, and logic failures."""
     results: dict[str, bool] = {
         "httpx": False,
@@ -59,11 +60,12 @@ async def _run_health_check(browser: PlaywrightClient) -> dict[str, bool]:
     except Exception:
         results["curl_cffi_github"] = False
 
-    try:
-        page = await browser.fetch("https://example.com")
-        results["playwright"] = "example domain" in str(page.get("html") or "").lower()
-    except Exception:
-        results["playwright"] = False
+    if browser is not None:
+        try:
+            page = await browser.fetch("https://example.com")
+            results["playwright"] = "example domain" in str(page.get("html") or "").lower()
+        except Exception:
+            results["playwright"] = False
 
     logger.info("pipeline_health_check", **results)
     return results
@@ -105,6 +107,17 @@ async def _should_stop_scan(callback: ShouldStopCallback | None) -> bool:
     except Exception:
         logger.debug("osint_should_stop_check_failed")
         return False
+
+
+async def _stop_requested(
+    callback: ShouldStopCallback | None,
+    boot_log: list[str],
+    message: str,
+) -> bool:
+    if not await _should_stop_scan(callback):
+        return False
+    boot_log.append(message)
+    return True
 
 
 def _run_async(coro):
@@ -151,11 +164,6 @@ async def run_osint_loop(
             "discovered_urls": [],
         }
 
-    owned_browser = browser is None
-    active_browser = browser or PlaywrightClient()
-    if owned_browser:
-        await active_browser.start()
-
     accounts_by_url: dict[str, dict] = {}
     profiles_by_url: dict[str, dict] = {}
     discovered_usernames: set[str] = set()
@@ -164,6 +172,13 @@ async def run_osint_loop(
     pending_identifiers: set[str] = set(cleaned)
     boot_log: list[str] = []
     settings = get_settings()
+    use_browser_layers = settings.osint_enable_playwright_layers
+    owned_browser = use_browser_layers and browser is None
+    active_browser = browser if use_browser_layers else None
+    if use_browser_layers and active_browser is None:
+        active_browser = PlaywrightClient()
+    if owned_browser and active_browser is not None:
+        await active_browser.start()
 
     try:
         health = await _run_health_check(active_browser)
@@ -174,7 +189,7 @@ async def run_osint_loop(
             f"playwright={'ok' if health.get('playwright') else 'fail'}."
         )
 
-        if not any(health.values()):
+        if not health.get("httpx") and not health.get("curl_cffi_github") and not health.get("playwright"):
             boot_log.append("Health check failed on all transports; aborting crawl.")
             return {
                 "accounts": [],
@@ -236,6 +251,12 @@ async def run_osint_loop(
                     boot_log.append(
                         f"Layer 0 (gravatar): {'hit' if gravatar else 'miss'} for {email_seed}."
                     )
+                if await _stop_requested(
+                    should_stop,
+                    boot_log,
+                    f"Stop requested during depth {depth} after gravatar lookup.",
+                ):
+                    break
 
             account_runs = await asyncio.gather(
                 *[discover_accounts(seed) for seed in email_seeds],
@@ -288,6 +309,12 @@ async def run_osint_loop(
                     "new_accounts": len(new_accounts),
                 }
             )
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after holehe discovery.",
+            ):
+                break
 
             expanded_usernames = await discover_usernames(
                 list(accounts_by_url.values()),
@@ -356,9 +383,66 @@ async def run_osint_loop(
                 f"Layer 1.55 (github email lookup): {len(github_email_usernames)} username(s) "
                 f"found from {len(email_seeds)} email seed(s)."
             )
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after GitHub email lookup.",
+            ):
+                break
 
-            platform_candidates = list(discovered_usernames)[:40]
-            platform_hits = await probe_usernames(platform_candidates, active_browser)
+            maigret_hits: list[dict] = []
+            maigret_candidates = list(discovered_usernames)[: max(1, settings.osint_maigret_candidates)]
+            if settings.osint_enable_maigret and maigret_candidates:
+                maigret_hits = await discover_profiles_via_username_tools(
+                    maigret_candidates,
+                    active_browser if settings.osint_enable_platform_browser_fallback else None,
+                )
+                for hit in maigret_hits:
+                    url = str(hit.get("url") or "")
+                    if url and url not in discovered_urls and url not in newly_discovered_urls:
+                        newly_discovered_urls.add(url)
+                        await _notify_site_found(
+                            on_site_found,
+                            {
+                                "url": url,
+                                "source": "maigret",
+                                "site": _site_label_from_url(url),
+                                "data_types": ["Email"],
+                                "confidence": 88,
+                            },
+                        )
+
+                    uname = str(hit.get("username") or "").strip().lower()
+                    _add_username(discovered_usernames, uname)
+
+                    key = url or f"{hit.get('site')}:{uname}"
+                    if key not in accounts_by_url:
+                        account_row = {
+                            "platform": hit.get("site"),
+                            "username": hit.get("username"),
+                            "url": url,
+                            "confidence": 88,
+                        }
+                        accounts_by_url[key] = account_row
+                        new_accounts.append(account_row)
+
+            boot_log.append(
+                f"Layer 1.58 (maigret): {len(maigret_hits)} profile hit(s) "
+                f"across {len(maigret_candidates)} username(s)."
+            )
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after Maigret discovery.",
+            ):
+                break
+
+            platform_candidates = list(discovered_usernames)[: max(1, settings.osint_platform_probe_candidates)]
+            platform_hits = await probe_usernames(
+                platform_candidates,
+                active_browser,
+                allow_browser_fallback=settings.osint_enable_platform_browser_fallback,
+            )
             for hit in platform_hits:
                 url = str(hit.get("url") or "")
                 if url and url not in discovered_urls and url not in newly_discovered_urls:
@@ -392,6 +476,12 @@ async def run_osint_loop(
                 f"Layer 1.5 (platform probe): {len(platform_hits)} profile hit(s) "
                 f"across {len(platform_candidates)} username(s)."
             )
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after platform probing.",
+            ):
+                break
 
             github_usernames_to_pivot = {
                 str(hit.get("username") or "").strip().lower()
@@ -435,35 +525,42 @@ async def run_osint_loop(
                 "Layer 1.6 (github api): "
                 f"{len(github_usernames_to_pivot)} github account(s) pivoted."
             )
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after GitHub pivoting.",
+            ):
+                break
 
-            search_queries = build_search_queries(
-                usernames=sorted(discovered_usernames)[:8],
-                emails=email_seeds,
-            )
-
-            search_runs = await asyncio.gather(
-                *[search_public_web(query, active_browser) for query in search_queries],
-                return_exceptions=True,
-            )
             layer2_urls: set[str] = set()
-            for result in search_runs:
-                if isinstance(result, Exception):
-                    logger.warning("osint_search_probe_failed", error=str(result))
-                    continue
-                for url in result:
-                    if url and url not in discovered_urls and url not in newly_discovered_urls:
-                        layer2_urls.add(url)
-                        newly_discovered_urls.add(url)
-                        await _notify_site_found(
-                            on_site_found,
-                            {
-                                "url": url,
-                                "source": "search_probe",
-                                "site": _site_label_from_url(url),
-                                "data_types": ["Email"],
-                                "confidence": 72,
-                            },
-                        )
+            if settings.osint_enable_search_probe:
+                search_queries = build_search_queries(
+                    usernames=sorted(discovered_usernames)[:8],
+                    emails=email_seeds,
+                )
+
+                search_runs = await asyncio.gather(
+                    *[search_public_web(query, active_browser) for query in search_queries],
+                    return_exceptions=True,
+                )
+                for result in search_runs:
+                    if isinstance(result, Exception):
+                        logger.warning("osint_search_probe_failed", error=str(result))
+                        continue
+                    for url in result:
+                        if url and url not in discovered_urls and url not in newly_discovered_urls:
+                            layer2_urls.add(url)
+                            newly_discovered_urls.add(url)
+                            await _notify_site_found(
+                                on_site_found,
+                                {
+                                    "url": url,
+                                    "source": "search_probe",
+                                    "site": _site_label_from_url(url),
+                                    "data_types": ["Email"],
+                                    "confidence": 72,
+                                },
+                            )
 
             boot_log.append(
                 f"Layer 2 (search probe): discovered {len(layer2_urls)} new URL(s)."
@@ -476,8 +573,14 @@ async def run_osint_loop(
                     "new_urls": len(layer2_urls),
                 }
             )
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after search probing.",
+            ):
+                break
 
-            if depth == 1:
+            if depth == 1 and settings.osint_enable_paste_search and active_browser is not None:
                 paste_total = 0
                 for email_seed in email_seeds:
                     paste_urls = await search_paste_sites(email_seed, active_browser)
@@ -498,6 +601,12 @@ async def run_osint_loop(
                 boot_log.append(f"Layer 2.8 (paste sites): {paste_total} URL(s) found.")
             else:
                 paste_total = 0
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after paste search.",
+            ):
+                break
 
             discovered_urls.update(newly_discovered_urls)
 
@@ -569,6 +678,12 @@ async def run_osint_loop(
                     "new_profiles": new_profiles,
                 }
             )
+            if await _stop_requested(
+                should_stop,
+                boot_log,
+                f"Stop requested during depth {depth} after profile scraping.",
+            ):
+                break
 
             depth_signal = (
                 len(new_accounts)
@@ -594,7 +709,11 @@ async def run_osint_loop(
             pending_identifiers = email_pivots
 
         profiles = list(profiles_by_url.values())
-        identity = await resolve_identity(profiles, llm)
+        identity_llm = llm
+        if await _should_stop_scan(should_stop):
+            boot_log.append("Stop requested after crawl; skipping identity LLM synthesis.")
+            identity_llm = None
+        identity = await resolve_identity(profiles, identity_llm)
         graph = build_graph(
             cleaned[0],
             [str(row.get("platform") or "unknown") for row in accounts_by_url.values()],
@@ -615,7 +734,7 @@ async def run_osint_loop(
             "discovered_urls": sorted(discovered_urls),
         }
     finally:
-        if owned_browser:
+        if owned_browser and active_browser is not None:
             await active_browser.stop()
 
 

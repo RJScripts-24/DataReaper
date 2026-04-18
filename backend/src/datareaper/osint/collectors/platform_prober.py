@@ -192,8 +192,9 @@ async def _check_with_browser(
 
 async def probe_usernames(
     usernames: list[str],
-    browser: PlaywrightClient,
+    browser: PlaywrightClient | None = None,
     concurrency: int = 10,
+    allow_browser_fallback: bool = False,
 ) -> list[dict]:
     filtered_usernames = sorted(
         {username.strip().lower() for username in usernames if is_plausible_username(username)}
@@ -226,21 +227,22 @@ async def probe_usernames(
         }
 
         # Phase 2: browser fallback for non-http-only platforms not confirmed in phase 1.
-        browser_only = [
-            platform
-            for platform in catalog
-            if (
-                not platform.get("http_only")
-                and str(platform.get("name") or "") not in confirmed_platforms
-            )
-        ]
-        browser_tasks = [
-            _check_with_browser(username, platform, browser, semaphore)
-            for username in filtered_usernames
-            for platform in browser_only
-        ]
-        browser_results = await asyncio.gather(*browser_tasks, return_exceptions=True)
-        results.extend(r for r in browser_results if isinstance(r, dict))
+        if browser is not None and allow_browser_fallback:
+            browser_only = [
+                platform
+                for platform in catalog
+                if (
+                    not platform.get("http_only")
+                    and str(platform.get("name") or "") not in confirmed_platforms
+                )
+            ]
+            browser_tasks = [
+                _check_with_browser(username, platform, browser, semaphore)
+                for username in filtered_usernames
+                for platform in browser_only
+            ]
+            browser_results = await asyncio.gather(*browser_tasks, return_exceptions=True)
+            results.extend(r for r in browser_results if isinstance(r, dict))
 
         deduped: dict[str, dict] = {}
         for row in results:

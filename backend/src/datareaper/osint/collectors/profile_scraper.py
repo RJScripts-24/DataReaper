@@ -1,16 +1,25 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json as _json
 import re
 from urllib.parse import urlparse
 
+import httpx
 from bs4 import BeautifulSoup
+from curl_cffi.requests import AsyncSession
 
+from datareaper.core.config import get_settings
 from datareaper.core.logging import get_logger
 from datareaper.integrations.browser.playwright_client import PlaywrightClient
 from datareaper.integrations.llm.base import BaseLLMClient
 from datareaper.integrations.llm.prompt_loader import load_prompt
+from datareaper.osint.username_discovery import is_plausible_username
 from datareaper.utils.storage import upload_evidence
+
+try:
+    from trafilatura import extract as trafilatura_extract
+except ModuleNotFoundError:  # pragma: no cover - depends on optional local deps
+    trafilatura_extract = None
 
 LOCATION_REGEX = re.compile(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*),\s([A-Z][a-z]+)\b")
 EMPLOYER_REGEX = re.compile(
@@ -18,6 +27,7 @@ EMPLOYER_REGEX = re.compile(
     re.IGNORECASE,
 )
 EMAIL_REGEX = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+HANDLE_REGEX = re.compile(r"@?([A-Za-z0-9_.-]{3,40})")
 
 logger = get_logger(__name__)
 
@@ -187,6 +197,7 @@ def _extract_from_html(html: str) -> dict:
         "same_as_urls": jsonld.get("same_as", []),
         "social_handles": social,
         "image_url": jsonld.get("image") or og.get("image"),
+        "text_blob": text_blob,
     }
 
 
@@ -219,17 +230,17 @@ def is_profile_candidate_url(url: str) -> bool:
     )
 
 
-async def _extract_with_llm(url: str, html: str, llm: BaseLLMClient | None) -> dict:
+async def _extract_with_llm(url: str, text: str, llm: BaseLLMClient | None) -> dict:
     if llm is None:
         return {}
 
     system = load_prompt("sleuth_identity.md")
     prompt = (
-        "Extract profile attributes from this public page HTML snippet. "
+        "Extract profile attributes from this public page text snippet. "
         "Return strict JSON with keys: name, location, employer, confidence, emails, usernames. "
         "Use confidence between 0 and 1.\n\n"
         f"URL: {url}\n"
-        f"HTML_SNIPPET:\n{html[:12000]}"
+        f"TEXT_SNIPPET:\n{text[:12000]}"
     )
     try:
         payload = await llm.generate_json(prompt=prompt, system=system, max_tokens=512)
@@ -239,13 +250,104 @@ async def _extract_with_llm(url: str, html: str, llm: BaseLLMClient | None) -> d
         return {}
 
 
+async def _fetch_profile_page(url: str, browser: PlaywrightClient | None) -> dict:
+    if browser is not None:
+        return await browser.fetch(url)
+
+    try:
+        async with AsyncSession(impersonate="chrome120") as session:
+            response = await session.get(url, timeout=10, allow_redirects=True)
+            return {
+                "url": url,
+                "final_url": str(response.url),
+                "html": str(response.text or ""),
+                "status": int(response.status_code or 0),
+            }
+    except Exception:
+        try:
+            async with httpx.AsyncClient(
+                timeout=10,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/123.0.0.0 Safari/537.36"
+                    )
+                },
+            ) as client:
+                response = await client.get(url)
+                return {
+                    "url": url,
+                    "final_url": str(response.url),
+                    "html": response.text or "",
+                    "status": int(response.status_code or 0),
+                }
+        except Exception as exc:
+            logger.warning("profile_fetch_failed", url=url, error=str(exc))
+            return {"url": url, "final_url": url, "html": "", "status": 0, "error": str(exc)}
+
+
+def _extract_with_trafilatura(url: str, html: str) -> dict:
+    settings = get_settings()
+    if not settings.osint_enable_trafilatura or trafilatura_extract is None or not html:
+        return {}
+
+    try:
+        payload = trafilatura_extract(
+            html,
+            url=url,
+            output_format="json",
+            with_metadata=True,
+            include_links=True,
+            favor_precision=True,
+            deduplicate=True,
+        )
+        if not payload:
+            return {}
+        parsed = _json.loads(payload)
+        if not isinstance(parsed, dict):
+            return {}
+    except Exception as exc:
+        logger.debug("profile_trafilatura_failed", url=url, error=str(exc))
+        return {}
+
+    text_parts = [
+        str(parsed.get("title") or "").strip(),
+        str(parsed.get("description") or "").strip(),
+        str(parsed.get("author") or "").strip(),
+        str(parsed.get("text") or "").strip(),
+    ]
+    text_blob = " ".join(part for part in text_parts if part)
+    location_match = LOCATION_REGEX.search(text_blob)
+    employer_match = EMPLOYER_REGEX.search(text_blob)
+
+    usernames: list[str] = []
+    for value in [url, text_blob[:400]]:
+        for match in HANDLE_REGEX.findall(value):
+            candidate = match.strip().lower()
+            if is_plausible_username(candidate):
+                usernames.append(candidate)
+
+    return {
+        "name": str(parsed.get("author") or parsed.get("title") or "").strip() or None,
+        "location": ", ".join(location_match.groups()) if location_match else None,
+        "employer": employer_match.group(1).strip() if employer_match else None,
+        "emails": sorted(set(EMAIL_REGEX.findall(text_blob))),
+        "discovered_usernames": list(dict.fromkeys(usernames))[:8],
+        "text_blob": text_blob,
+    }
+
+
 async def scrape_profile(
     url: str,
-    browser: PlaywrightClient,
+    browser: PlaywrightClient | None,
     llm: BaseLLMClient | None = None,
 ) -> dict:
     candidate = is_profile_candidate_url(url)
-    result = await browser.fetch(url)
+    result = await _fetch_profile_page(url, browser)
+    final_url = str(result.get("final_url") or url)
+    candidate = candidate or is_profile_candidate_url(final_url)
     html = result.get("html") or ""
     if not html:
         return {
@@ -255,9 +357,9 @@ async def scrape_profile(
             "job_title": None,
             "confidence": 0.0,
             "evidence_url": None,
-            "url": url,
+            "url": final_url,
             "discovered_emails": [],
-            "discovered_usernames": _extract_usernames_from_url(url),
+            "discovered_usernames": _extract_usernames_from_url(final_url),
             "same_as_urls": [],
             "social_handles": {},
             "image_url": None,
@@ -265,19 +367,27 @@ async def scrape_profile(
         }
 
     fast = _extract_from_html(html)
-    name = fast.get("name")
-    location = fast.get("location")
-    employer = fast.get("employer")
+    extracted = _extract_with_trafilatura(final_url, html)
+
+    name = fast.get("name") or extracted.get("name")
+    location = fast.get("location") or extracted.get("location")
+    employer = fast.get("employer") or extracted.get("employer")
     job_title = fast.get("job_title")
-    discovered_emails = list(fast.get("emails") or [])
-    discovered_usernames = _extract_usernames_from_url(url)
+    discovered_emails = sorted({*(fast.get("emails") or []), *(extracted.get("emails") or [])})
+    discovered_usernames = sorted(
+        {
+            *_extract_usernames_from_url(final_url),
+            *list(extracted.get("discovered_usernames") or []),
+        }
+    )
     same_as_urls = list(fast.get("same_as_urls") or [])
     social_handles = dict(fast.get("social_handles") or {})
     image_url = fast.get("image_url")
 
     confidence = _confidence(name, location, employer)
-    if candidate and confidence < 0.8:
-        llm_payload = await _extract_with_llm(url, html, llm)
+    if candidate and browser is not None and confidence < 0.8:
+        llm_input = str(extracted.get("text_blob") or fast.get("text_blob") or html)
+        llm_payload = await _extract_with_llm(final_url, llm_input, llm)
         name = name or llm_payload.get("name")
         location = location or llm_payload.get("location")
         employer = employer or llm_payload.get("employer")
@@ -323,16 +433,16 @@ async def scrape_profile(
             image_url = str(llm_image)
 
     evidence_url = None
-    if candidate and confidence > 0.8 and (name or location):
-        screenshot = await browser.capture_screenshot(url)
+    if browser is not None and candidate and confidence > 0.8 and (name or location):
+        screenshot = await browser.capture_screenshot(final_url)
         if screenshot:
-            parsed = urlparse(url)
+            parsed = urlparse(final_url)
             host = (parsed.netloc or "profile").replace(":", "-")
             filename = f"{host}-evidence.png"
             try:
                 evidence_url = await upload_evidence(screenshot, filename, "image/png")
             except Exception as exc:  # pragma: no cover - external storage failures
-                logger.warning("profile_evidence_upload_failed", url=url, error=str(exc))
+                logger.warning("profile_evidence_upload_failed", url=final_url, error=str(exc))
 
     return {
         "name": name,
@@ -341,7 +451,7 @@ async def scrape_profile(
         "job_title": job_title,
         "confidence": round(confidence, 4),
         "evidence_url": evidence_url,
-        "url": url,
+        "url": final_url,
         "discovered_emails": discovered_emails,
         "discovered_usernames": discovered_usernames,
         "same_as_urls": same_as_urls,

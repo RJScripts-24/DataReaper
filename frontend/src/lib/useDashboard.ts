@@ -125,6 +125,8 @@ export type AgentStatus = {
   progress: number;
 };
 
+type AgentMode = "sleuth" | "legal" | "communications";
+
 export interface LiveDashboardState {
   brokerCount: number;
   exposureCount: number;
@@ -231,34 +233,244 @@ function modeFromAgentName(name: string): string {
   return "agent";
 }
 
-function progressFromStatus(status: string): number {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("complete") || normalized.includes("resolved")) {
+const DEFAULT_AGENT_BLUEPRINT: Array<{ mode: AgentMode; name: string; status: string; task: string }> = [
+  { mode: "sleuth", name: "Sleuth Agent", status: "Queued", task: "Waiting to start OSINT pipeline." },
+  { mode: "legal", name: "Legal Agent", status: "Idle", task: "Awaiting discovered targets." },
+  { mode: "communications", name: "Communications Agent", status: "Idle", task: "Awaiting legal dispatch." },
+];
+
+function canonicalAgentName(mode: AgentMode): string {
+  return DEFAULT_AGENT_BLUEPRINT.find((entry) => entry.mode === mode)?.name ?? "Agent";
+}
+
+function toAgentMode(name: string): AgentMode {
+  const mode = modeFromAgentName(name);
+  if (mode === "sleuth" || mode === "legal" || mode === "communications") {
+    return mode;
+  }
+  return "sleuth";
+}
+
+function progressFromAgent(mode: string, status: string, task: string): number {
+  const normalized = `${status} ${task}`.toLowerCase();
+  if (normalized.includes("stopped") || normalized.includes("halted")) {
+    return 8;
+  }
+  if (normalized.includes("complete") || normalized.includes("resolved") || normalized.includes("finished")) {
     return 100;
   }
-  if (normalized.includes("active") || normalized.includes("processing") || normalized.includes("engaged")) {
-    return 65;
+  if (normalized.includes("monitor")) {
+    return 88;
   }
-  if (normalized.includes("draft")) {
-    return 40;
+  if (normalized.includes("dispatch")) {
+    return mode === "legal" ? 78 : 42;
+  }
+  if (normalized.includes("active") || normalized.includes("processing") || normalized.includes("engaged")) {
+    if (mode === "communications") {
+      return 86;
+    }
+    if (mode === "legal") {
+      return 72;
+    }
+    return 60;
+  }
+  if (normalized.includes("queued") || normalized.includes("waiting")) {
+    return mode === "sleuth" ? 18 : 10;
+  }
+  if (normalized.includes("idle") || normalized.includes("awaiting")) {
+    return mode === "sleuth" ? 14 : 6;
   }
   return 30;
 }
 
 function activityColorForEventType(eventType: string): string {
-  if (eventType === "exposure_found") {
-    return "#b94a48";
+  const normalized = eventType.toLowerCase();
+  if (normalized === "system") {
+    return "#4a6fa5";
   }
-  if (eventType === "broker_contacted" || eventType === "stage_complete") {
+  if (normalized === "legal") {
     return "#d17a22";
   }
-  if (eventType === "deletion_confirmed" || eventType === "agent_resumed") {
+  if (normalized === "comm") {
+    return "#d17a22";
+  }
+  if (normalized === "boot_log" || normalized === "osint_debug" || normalized === "target_debug") {
+    return "#4a6fa5";
+  }
+  if (normalized === "exposure_found") {
+    return "#b94a48";
+  }
+  if (normalized === "broker_contacted" || normalized === "stage_complete") {
+    return "#d17a22";
+  }
+  if (normalized === "deletion_confirmed" || normalized === "agent_resumed") {
     return "#4f7d5c";
   }
-  if (eventType === "captcha_block") {
+  if (normalized === "captcha_block" || normalized === "scan_stopped") {
     return "#b94a48";
   }
   return "#4a6fa5";
+}
+
+function buildAgentStatus(
+  agent: { name: string; status: string; detail: string } | { mode: AgentMode; name?: string; status: string; task: string }
+): AgentStatus {
+  const rawName =
+    "name" in agent && agent.name
+      ? agent.name
+      : "mode" in agent
+        ? canonicalAgentName(agent.mode)
+        : "Agent";
+  const mode = toAgentMode(rawName);
+  const status = String(agent.status || "Idle");
+  const task = "detail" in agent ? String(agent.detail || "Processing") : String(agent.task || "Processing");
+
+  return {
+    mode,
+    name: canonicalAgentName(mode),
+    status,
+    task,
+    progress: progressFromAgent(mode, status, task),
+  };
+}
+
+function mergeAgentStatuses(existing: AgentStatus[], updates: AgentStatus[]): AgentStatus[] {
+  const byMode = new Map<AgentMode, AgentStatus>();
+  for (const blueprint of DEFAULT_AGENT_BLUEPRINT) {
+    byMode.set(blueprint.mode, buildAgentStatus(blueprint));
+  }
+  for (const agent of existing) {
+    byMode.set(toAgentMode(agent.name), buildAgentStatus({ name: agent.name, status: agent.status, detail: agent.task }));
+  }
+  for (const agent of updates) {
+    byMode.set(toAgentMode(agent.name), agent);
+  }
+  return DEFAULT_AGENT_BLUEPRINT.map((blueprint) => byMode.get(blueprint.mode) ?? buildAgentStatus(blueprint));
+}
+
+function applyStageAgentUpdates(
+  previous: AgentStatus[],
+  stage: string,
+  payload: Record<string, unknown>
+): AgentStatus[] {
+  const normalizedStage = stage.toLowerCase();
+  switch (normalizedStage) {
+    case "osint_started":
+      return mergeAgentStatuses(previous, [
+        buildAgentStatus({ mode: "sleuth", status: "Active", task: "Running OSINT pipeline." }),
+        buildAgentStatus({ mode: "legal", status: "Idle", task: "Awaiting discovered targets." }),
+        buildAgentStatus({ mode: "communications", status: "Idle", task: "Awaiting legal dispatch." }),
+      ]);
+    case "osint_cycle": {
+      const newAccounts = toNumber(payload.new_accounts ?? payload.accounts);
+      const sitesFound = toNumber(payload.sites_found);
+      const hasFollowup = Boolean(payload.next_job_id);
+      const hasDiscoverHandoff = Boolean(payload.discover_job_id);
+
+      return mergeAgentStatuses(previous, [
+        buildAgentStatus({
+          mode: "sleuth",
+          status: hasFollowup ? "Active" : "Complete",
+          task: hasFollowup
+            ? `Continuing reconnaissance. ${sitesFound} live site(s) found in the latest cycle.`
+            : `Recon finished. ${newAccounts} account(s) and ${sitesFound} site hit(s) handed off.`,
+        }),
+        buildAgentStatus({
+          mode: "legal",
+          status: hasDiscoverHandoff ? "Queued" : "Idle",
+          task: hasDiscoverHandoff
+            ? "Preparing broker target review from OSINT handoff."
+            : "Awaiting discovered targets.",
+        }),
+      ]);
+    }
+    case "broker_discovery": {
+      const count = toNumber(payload.count);
+      return mergeAgentStatuses(previous, [
+        buildAgentStatus({
+          mode: "legal",
+          status: count > 0 ? "Active" : "Idle",
+          task: count > 0 ? `Mapped ${count} broker target(s) for legal review.` : "No broker targets matched yet.",
+        }),
+        buildAgentStatus({
+          mode: "communications",
+          status: count > 0 ? "Queued" : "Idle",
+          task: count > 0 ? "Standing by for legal dispatch." : "Awaiting legal dispatch.",
+        }),
+      ]);
+    }
+    case "legal_dispatch": {
+      const sent = toNumber(payload.sent);
+      return mergeAgentStatuses(previous, [
+        buildAgentStatus({
+          mode: "legal",
+          status: sent > 0 ? "Complete" : "Idle",
+          task: sent > 0 ? `Dispatched ${sent} deletion notice(s).` : "No dispatch sent yet.",
+        }),
+        buildAgentStatus({
+          mode: "communications",
+          status: sent > 0 ? "Active" : "Idle",
+          task: sent > 0 ? `Monitoring broker inbox replies for ${sent} notice(s).` : "Awaiting legal dispatch.",
+        }),
+      ]);
+    }
+    default:
+      return previous;
+  }
+}
+
+function applyLifecycleAgentUpdates(
+  previous: AgentStatus[],
+  status: string,
+  currentStage?: string
+): AgentStatus[] {
+  const normalizedStatus = status.toLowerCase();
+  const normalizedStage = String(currentStage || "").toLowerCase();
+
+  if (normalizedStatus === "connected") {
+    return previous.length === 0 ? mergeAgentStatuses([], []) : previous;
+  }
+
+  if (normalizedStatus === "cancelled" || normalizedStage === "stopped_by_user") {
+    return mergeAgentStatuses(previous, [
+      buildAgentStatus({ mode: "sleuth", status: "Stopped", task: "Scan stopped by user." }),
+      buildAgentStatus({ mode: "legal", status: "Stopped", task: "Target review halted." }),
+      buildAgentStatus({ mode: "communications", status: "Stopped", task: "Inbox monitoring halted." }),
+    ]);
+  }
+
+  if (normalizedStage === "osint") {
+    return applyStageAgentUpdates(previous, "osint_started", {});
+  }
+  if (normalizedStage === "legal_dispatch") {
+    return mergeAgentStatuses(previous, [
+      buildAgentStatus({
+        mode: "legal",
+        status: "Active",
+        task: "Preparing legal action for discovered broker targets.",
+      }),
+      buildAgentStatus({
+        mode: "communications",
+        status: "Queued",
+        task: "Standing by for legal dispatch.",
+      }),
+    ]);
+  }
+  if (normalizedStage === "inbox_monitoring") {
+    return mergeAgentStatuses(previous, [
+      buildAgentStatus({
+        mode: "legal",
+        status: "Complete",
+        task: "Legal notices dispatched. Monitoring for broker responses.",
+      }),
+      buildAgentStatus({
+        mode: "communications",
+        status: "Active",
+        task: "Monitoring broker inbox replies.",
+      }),
+    ]);
+  }
+  return previous;
 }
 
 function statValue(stats: DashboardStat[], title: string): number {
@@ -298,16 +510,19 @@ function mapDashboardResponse(response: DashboardResponse): LiveDashboardState {
       id: item.id,
       type: String(item.type || "System"),
       message: String(item.message || "No message"),
-      color: activityColorForEventType("stage_complete"),
+      color: activityColorForEventType(String(item.type || "System")),
       createdAt: String(item.created_at || new Date().toISOString()),
     })),
-    agentStatuses: response.agent_statuses.map((agent) => ({
-      mode: modeFromAgentName(String(agent.name || "Agent")),
-      name: String(agent.name || "Agent"),
-      status: String(agent.status || "Active"),
-      task: String(agent.detail || "Processing"),
-      progress: progressFromStatus(String(agent.status || "Active")),
-    })),
+    agentStatuses: mergeAgentStatuses(
+      [],
+      response.agent_statuses.map((agent) =>
+        buildAgentStatus({
+          name: String(agent.name || "Agent"),
+          status: String(agent.status || "Active"),
+          detail: String(agent.detail || "Processing"),
+        })
+      )
+    ),
     pivotGraph: {
       emails: [],
       usernames: [],
@@ -523,6 +738,11 @@ export function useDashboard(scanId: string | null): {
 
         switch (sleuthEvent.event) {
           case "stage_complete": {
+            next = {
+              ...next,
+              agentStatuses: applyStageAgentUpdates(next.agentStatuses, sleuthEvent.payload.stage, sleuthEvent.payload),
+            };
+
             if (sleuthEvent.payload.stage === "username_pivot") {
               const usernames = sleuthEvent.payload.usernames ?? [];
               next = {
@@ -584,6 +804,7 @@ export function useDashboard(scanId: string | null): {
 
           case "exposure_found": {
             const threatType = inferThreatTypeFromData(sleuthEvent.payload.data_types);
+            const nextExposureCount = next.exposureCount + 1;
             const radarTarget: RadarDot = {
               id: `exposure-${event.occurredAt}-${sleuthEvent.payload.broker_name}`,
               angle: toNumber(sleuthEvent.payload.angle),
@@ -596,7 +817,7 @@ export function useDashboard(scanId: string | null): {
 
             next = {
               ...next,
-              exposureCount: next.exposureCount + 1,
+              exposureCount: nextExposureCount,
               radarTargets: [radarTarget, ...next.radarTargets].slice(0, 200),
               pivotGraph: {
                 ...next.pivotGraph,
@@ -606,6 +827,13 @@ export function useDashboard(scanId: string | null): {
                 ...next.threatBreakdown,
                 [threatType]: next.threatBreakdown[threatType] + 1,
               },
+              agentStatuses: mergeAgentStatuses(next.agentStatuses, [
+                buildAgentStatus({
+                  mode: "sleuth",
+                  status: "Active",
+                  task: `Running OSINT pipeline. ${nextExposureCount} live exposure(s) confirmed.`,
+                }),
+              ]),
             };
             break;
           }
@@ -614,6 +842,13 @@ export function useDashboard(scanId: string | null): {
             next = {
               ...next,
               disputeCount: next.disputeCount + 1,
+              agentStatuses: mergeAgentStatuses(next.agentStatuses, [
+                buildAgentStatus({
+                  mode: "communications",
+                  status: "Active",
+                  task: `Broker outreach active for ${sleuthEvent.payload.broker_name}.`,
+                }),
+              ]),
             };
             break;
           }
@@ -623,6 +858,13 @@ export function useDashboard(scanId: string | null): {
               ...next,
               deletionCount: next.deletionCount + 1,
               disputeCount: Math.max(0, next.disputeCount - 1),
+              agentStatuses: mergeAgentStatuses(next.agentStatuses, [
+                buildAgentStatus({
+                  mode: "legal",
+                  status: "Complete",
+                  task: `Deletion confirmed by ${sleuthEvent.payload.broker_name}.`,
+                }),
+              ]),
             };
             break;
           }
@@ -634,14 +876,18 @@ export function useDashboard(scanId: string | null): {
             );
 
             const updatedStatus: AgentStatus = {
-              mode: modeFromAgentName(sleuthEvent.payload.agent),
+              mode: toAgentMode(sleuthEvent.payload.agent),
               name:
                 existingIndex >= 0
                   ? next.agentStatuses[existingIndex]?.name ?? sleuthEvent.payload.agent
                   : sleuthEvent.payload.agent,
               status: sleuthEvent.payload.status,
               task: sleuthEvent.payload.detail,
-              progress: progressFromStatus(sleuthEvent.payload.status),
+              progress: progressFromAgent(
+                toAgentMode(sleuthEvent.payload.agent),
+                sleuthEvent.payload.status,
+                sleuthEvent.payload.detail
+              ),
             };
 
             if (existingIndex >= 0) {
@@ -661,9 +907,51 @@ export function useDashboard(scanId: string | null): {
           }
 
           case "captcha_block":
+            next = {
+              ...next,
+              agentStatuses: mergeAgentStatuses(next.agentStatuses, [
+                buildAgentStatus({
+                  mode: "communications",
+                  status: "Active",
+                  task: `Manual action required at ${sleuthEvent.payload.broker}.`,
+                }),
+              ]),
+            };
+            break;
+
           case "agent_resumed":
+            next = {
+              ...next,
+              agentStatuses: mergeAgentStatuses(next.agentStatuses, [
+                buildAgentStatus({
+                  mode: "communications",
+                  status: "Active",
+                  task: "Inbox monitoring resumed after manual intervention.",
+                }),
+              ]),
+            };
+            break;
+
           case "scan_stopped":
+            next = {
+              ...next,
+              agentStatuses: applyLifecycleAgentUpdates(
+                next.agentStatuses,
+                sleuthEvent.payload.status,
+                sleuthEvent.payload.current_stage
+              ),
+            };
+            break;
+
           case "scan_lifecycle_updated":
+            next = {
+              ...next,
+              agentStatuses: applyLifecycleAgentUpdates(
+                next.agentStatuses,
+                sleuthEvent.payload.status,
+                sleuthEvent.payload.current_stage
+              ),
+            };
             break;
         }
 

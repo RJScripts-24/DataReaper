@@ -3,9 +3,10 @@
 import hashlib
 from urllib.parse import urlparse
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
+from datareaper.core.config import get_settings
 from datareaper.core.ids import new_id
 from datareaper.core.logging import get_logger
 from datareaper.db.models.activity_event import ActivityEvent
@@ -24,6 +25,7 @@ from datareaper.realtime.publishers import publish
 logger = get_logger(__name__)
 OSINT_REQUEUE_DELAY_SECONDS = 20
 MAX_PERSISTED_EXPOSURE_EVENTS_PER_CYCLE = 120
+MAX_PERSISTED_DEBUG_EVENTS_PER_CYCLE = 200
 
 
 def _platform_from_url(url: str) -> str:
@@ -164,8 +166,10 @@ async def run_osint_pipeline(ctx: dict, scan_id: str) -> dict:
         for key in known_account_keys
         if key[0]
     }
+    settings = get_settings()
     sites_found_in_cycle = 0
     deferred_exposure_events: list[dict] = []
+    deferred_debug_events: list[dict] = []
 
     async def _on_site_found(payload: dict) -> None:
         nonlocal sites_found_in_cycle
@@ -195,11 +199,33 @@ async def run_osint_pipeline(ctx: dict, scan_id: str) -> dict:
             "distance": distance,
         }
 
+        logger.info(
+            "osint_site_found",
+            scan_id=scan_id,
+            cycle=cycle_number,
+            site=site,
+            source=event_payload["source"],
+            url=url,
+            confidence=event_payload["priority_score"],
+            data_types=event_payload["data_types"],
+        )
+
         if len(deferred_exposure_events) < MAX_PERSISTED_EXPOSURE_EVENTS_PER_CYCLE:
             deferred_exposure_events.append(
                 {
                     "message": f"Exposure found on {site}.",
                     "payload": event_payload,
+                }
+            )
+        if settings.osint_debug_events and len(deferred_debug_events) < MAX_PERSISTED_DEBUG_EVENTS_PER_CYCLE:
+            deferred_debug_events.append(
+                {
+                    "message": f"OSINT hit accepted: {site} via {event_payload['source']}.",
+                    "payload": {
+                        "stage": "osint_debug",
+                        "cycle": cycle_number,
+                        **event_payload,
+                    },
                 }
             )
         await publish(
@@ -339,33 +365,42 @@ async def run_osint_pipeline(ctx: dict, scan_id: str) -> dict:
                 )
             )
 
-        existing_node = await session.execute(
-            select(GraphNode.id).where(GraphNode.scan_job_id == scan_id).limit(1)
-        )
-        if existing_node.scalar_one_or_none() is None:
-            for node in graph.get("nodes", []):
-                session.add(
-                    GraphNode(
-                        id=new_id("node"),
-                        scan_job_id=scan_id,
-                        node_key=node.get("id"),
-                        node_type=node.get("type"),
-                        label=node.get("label"),
-                        pos_x=node.get("x", 0),
-                        pos_y=node.get("y", 0),
-                        payload=node.get("data", {}),
-                    )
+        for debug_event in deferred_debug_events:
+            session.add(
+                ActivityEvent(
+                    id=new_id("evt"),
+                    scan_job_id=scan_id,
+                    event_type="osint_debug",
+                    message=str(debug_event.get("message") or "OSINT debug."),
+                    payload=dict(debug_event.get("payload") or {}),
                 )
-            for edge in graph.get("edges", []):
-                session.add(
-                    GraphEdge(
-                        id=new_id("edge"),
-                        scan_job_id=scan_id,
-                        source_node_key=edge.get("source"),
-                        target_node_key=edge.get("target"),
-                        relationship=edge.get("relationship"),
-                    )
+            )
+
+        await session.execute(delete(GraphEdge).where(GraphEdge.scan_job_id == scan_id))
+        await session.execute(delete(GraphNode).where(GraphNode.scan_job_id == scan_id))
+        for node in graph.get("nodes", []):
+            session.add(
+                GraphNode(
+                    id=new_id("node"),
+                    scan_job_id=scan_id,
+                    node_key=node.get("id"),
+                    node_type=node.get("type"),
+                    label=node.get("label"),
+                    pos_x=node.get("x", 0),
+                    pos_y=node.get("y", 0),
+                    payload=node.get("data", {}),
                 )
+            )
+        for edge in graph.get("edges", []):
+            session.add(
+                GraphEdge(
+                    id=new_id("edge"),
+                    scan_job_id=scan_id,
+                    source_node_key=edge.get("source"),
+                    target_node_key=edge.get("target"),
+                    relationship=edge.get("relationship"),
+                )
+            )
 
         if await _refresh_cancelled(scan, session):
             await session.commit()

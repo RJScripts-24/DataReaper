@@ -94,6 +94,8 @@ def _is_blocked_host(url: str) -> bool:
 
 
 async def _ddg_fallback(query: str, browser: PlaywrightClient | None) -> list[str]:
+    if not get_settings().osint_enable_duckduckgo_fallback:
+        return []
     if browser is None:
         return []
 

@@ -3,8 +3,9 @@
 import re
 from collections.abc import Iterable
 
+from datareaper.core.config import get_settings
 from datareaper.integrations.browser.playwright_client import PlaywrightClient
-from datareaper.osint.collectors.sherlock_runner import discover_profiles_via_sherlock
+from datareaper.osint.collectors.sherlock_runner import discover_profiles_via_username_tools
 
 USERNAME_PATTERN = re.compile(
     r"(?:github\.com|twitter\.com|x\.com|instagram\.com|linkedin\.com/in|reddit\.com/user)/([A-Za-z0-9_.-]+)",
@@ -133,6 +134,7 @@ async def discover_usernames(
     original_seeds: list[str] | None = None,
     browser: PlaywrightClient | None = None,
 ) -> list[str]:
+    settings = get_settings()
     generated = _extract_from_accounts(accounts)
 
     for seed in original_seeds or []:
@@ -145,7 +147,8 @@ async def discover_usernames(
     if browser is None:
         return sorted(generated)
 
-    profiles = await discover_profiles_via_sherlock(sorted(generated), browser)
+    usernames_to_expand = sorted(generated)[: max(1, settings.osint_maigret_candidates)]
+    profiles = await discover_profiles_via_username_tools(usernames_to_expand, browser)
     for profile in profiles:
         username = profile.get("username")
         if username and is_plausible_username(str(username)):

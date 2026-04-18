@@ -50,6 +50,18 @@ class Settings(BaseSettings):
     playwright_headless: bool = True
     playwright_proxy_server: str = ""
     local_storage_path: str = "./storage"
+    osint_enable_playwright_layers: bool = False
+    osint_enable_platform_browser_fallback: bool = False
+    osint_enable_search_probe: bool = False
+    osint_enable_duckduckgo_fallback: bool = False
+    osint_enable_paste_search: bool = False
+    osint_enable_maigret: bool = True
+    osint_enable_trafilatura: bool = True
+    osint_debug_events: bool = False
+    osint_platform_probe_candidates: int = 75
+    osint_maigret_candidates: int = 8
+    osint_maigret_top_sites: int = 150
+    osint_maigret_max_connections: int = 24
 
     @property
     def project_root(self) -> Path:

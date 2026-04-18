@@ -12,6 +12,7 @@ import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { type RealtimeConnectionStatus } from "../lib/wsClient";
 import { ReaperCursor } from "../components/ReaperCursor";
 import { useDashboard } from "../lib/useDashboard";
+import { useScanStatusQuery } from "../lib/hooks";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -153,13 +154,17 @@ function ThreatItem({ label, value, percent, color }: { label: string; value: nu
 
 function AgentStatusRow({ name, status, task, progress }: { name: string; status: string; task: string; progress: number }) {
   const normalized = status.toLowerCase();
-  const statusColor = normalized.includes("active")
-    ? COLORS.green
-    : normalized.includes("draft") || normalized.includes("process")
-      ? COLORS.blue
-      : normalized.includes("warn")
-        ? COLORS.orange
-        : COLORS.textSec;
+  const statusColor = normalized.includes("stopped")
+    ? COLORS.red
+    : normalized.includes("complete") || normalized.includes("resolved")
+      ? COLORS.green
+      : normalized.includes("active") || normalized.includes("monitor")
+        ? COLORS.blue
+        : normalized.includes("queued")
+          ? COLORS.orange
+          : normalized.includes("warn")
+            ? COLORS.orange
+            : COLORS.textSec;
 
   return (
     <div className="border-b-[1.5px] border-dashed border-black/10 pb-3 px-1">
@@ -233,10 +238,43 @@ function formatTimestamp(input: string | undefined): string {
   return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function MetadataPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      className="min-w-0 rounded-full px-4 py-2"
+      style={{
+        border: "1px dashed rgba(0,0,0,0.16)",
+        backgroundColor: "rgba(255,255,255,0.52)",
+      }}
+    >
+      <div
+        className="text-[0.72rem] uppercase tracking-[0.16em]"
+        style={{
+          fontFamily: "'Patrick Hand', cursive",
+          color: "rgba(31,31,31,0.58)",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        className="truncate text-base md:text-lg"
+        style={{
+          fontFamily: "'Patrick Hand', cursive",
+          color: COLORS.text,
+        }}
+        title={value}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export default function CommandCenter() {
   const navigate = useNavigate();
   const { clearActiveScan } = useScanContext();
   const scanId = useRequireScan();
+  const scanQuery = useScanStatusQuery(scanId);
 
   const [isRadarExpanded, setIsRadarExpanded] = useState(false);
   const [isFeedExpanded, setIsFeedExpanded] = useState(false);
@@ -330,6 +368,8 @@ export default function CommandCenter() {
   ];
 
   const lastUpdatedAt = activityLogs[0]?.createdAt;
+  const seedValue = scanQuery.data?.seed?.value?.trim() || "Awaiting seed sync";
+  const seedLabel = scanQuery.data?.seed?.type === "phone" ? "Phone number" : "Email";
 
   const statusLabel =
     isStopped
@@ -571,17 +611,23 @@ export default function CommandCenter() {
       </nav>
 
       <div className="max-w-[1600px] mx-auto px-4 py-4 relative z-10">
-        <div className="mb-6 border-b-[1.5px] border-dashed border-black/10 pb-4">
-          <PressureText as="h1" className="text-5xl mb-0" style={{ fontFamily: "'Caveat', cursive" }}>
+        <div className="mb-6 border-b-[1.5px] border-dashed border-black/10 pb-5">
+          <PressureText as="h1" className="text-5xl mb-3" style={{ fontFamily: "'Caveat', cursive" }}>
             Cyber Operations Center
           </PressureText>
-          <PressureText
-            as="p"
-            className="text-xl opacity-80"
-            style={{ fontFamily: "'Patrick Hand', cursive", letterSpacing: "0.02em" }}
-          >
+          {/*
+            <MetadataPill label={seedLabel} value={seedValue} />
+            <MetadataPill label="Scan ID" value={scanId} />
+            <MetadataPill label="Last update" value={formatTimestamp(lastUpdatedAt)} />
+          </div>
+          <div className="flex flex-wrap items-start gap-3 md:gap-4">
             Scan ID: {scanId} · Last update: {formatTimestamp(lastUpdatedAt)}
-          </PressureText>
+          */}
+          <div className="flex flex-wrap items-start gap-3 md:gap-4">
+            <MetadataPill label={seedLabel} value={seedValue} />
+            <MetadataPill label="Scan ID" value={scanId} />
+            <MetadataPill label="Last update" value={formatTimestamp(lastUpdatedAt)} />
+          </div>
         </div>
 
         {hasError && (
