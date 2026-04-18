@@ -1,9 +1,7 @@
 <div align="center">
-
 <img src="frontend/public/images/logo.png" alt="DataReaper Logo" width="300"/>
-
 <h1 align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=80&duration=3000&pause=1000&color=8B85FF&center=true&vCenter=true&width=800&height=100&lines=DATAREAPER;DATA+%☭+REAPER" alt="DataReaper" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=80&duration=3000&pause=1000&color=8B85FF&center=true&vCenter=true&width=800&height=100&lines=DATAREAPER" alt="DataReaper" />
 </h1>
 
 **Autonomous AI-Powered Privacy Defense Platform**
