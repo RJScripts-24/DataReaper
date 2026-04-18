@@ -4,6 +4,7 @@ import asyncio
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 import yaml
 from curl_cffi.requests import AsyncSession
@@ -72,6 +73,25 @@ def _looks_like_waf(html: str) -> bool:
     return any(marker in lowered for marker in WAF_TITLES)
 
 
+def _looks_like_profile_timeout_hit(url: str, username: str, html: str) -> bool:
+    """Fallback heuristic for JS-heavy pages that timeout before DOMContentLoaded."""
+    parsed = urlparse(url)
+    path = parsed.path.lower()
+    uname = username.strip().lower().lstrip("@")
+    if not uname:
+        return False
+
+    lowered = html.lower()
+    # Require both platform and username markers to reduce false positives.
+    host = parsed.netloc.lower()
+    return (
+        uname in lowered
+        and uname in path
+        and any(marker in lowered for marker in ("profile", "channel", "account", "@"))
+        and any(site in host for site in ("x.com", "twitter.com", "linkedin.com", "instagram.com", "twitch.tv"))
+    )
+
+
 async def _check_with_curl(
     username: str,
     platform: dict,
@@ -115,16 +135,23 @@ async def _check_with_browser(
         try:
             result = await browser.fetch(url)
             status = result.get("status", 0)
-            if status in (404, 410, 403, 429, 0):
+            if status in (404, 410, 403, 429):
                 return None
 
             html = str(result.get("html") or "")
+            if not html:
+                return None
+
             if _looks_like_waf(html):
                 return None
 
             title = _extract_title(html)
+
             if not _is_hit(title, username, platform):
-                return None
+                timed_out = bool(result.get("timed_out"))
+                if not (timed_out and _looks_like_profile_timeout_hit(url, username, html)):
+                    return None
+
             return {
                 "platform": platform.get("name"),
                 "username": username,

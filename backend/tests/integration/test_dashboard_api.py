@@ -19,3 +19,11 @@ def test_dashboard_api() -> None:
 
         response = client.get(f"/api/dashboard/{scan_id}")
         assert response.status_code == 200
+        payload = response.json()
+
+        assert payload.get("scan_id") == scan_id
+        assert isinstance(payload.get("stats"), list)
+        assert isinstance(payload.get("threat_breakdown"), dict)
+        assert isinstance(payload.get("radar_targets"), list)
+        assert isinstance(payload.get("activity_feed"), list)
+        assert isinstance(payload.get("agent_statuses"), list)

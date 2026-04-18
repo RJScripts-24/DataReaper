@@ -15,6 +15,7 @@ ScanStatus = Literal[
     "engaging",
     "stabilizing",
     "completed",
+    "cancelled",
     "failed",
 ]
 ThreatType = Literal["email", "phone", "location"]

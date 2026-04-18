@@ -6,12 +6,19 @@ from sqlalchemy import select
 
 from datareaper.brokers.catalog import load_broker_catalog
 from datareaper.comms.outbound_dispatcher import dispatch_notice
+from datareaper.core.ids import new_id
+from datareaper.core.logging import get_logger
+from datareaper.db.models.activity_event import ActivityEvent
 from datareaper.db.models.broker_case import BrokerCase
 from datareaper.db.models.scan_job import ScanJob
 from datareaper.db.models.seed import Seed
+from datareaper.db.repositories.scan_repo import is_terminal_scan_status
 from datareaper.db.session import SessionLocal
 from datareaper.legal.notice_builder import build_notice, build_notice_with_llm
 from datareaper.realtime.publishers import publish
+
+
+logger = get_logger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -33,6 +40,7 @@ def _get_opt_out_email(broker_name: str) -> str:
 
 
 async def send_legal_requests(ctx: dict, scan_id: str) -> dict:
+    logger.info("send_legal_requests_started", scan_id=scan_id)
     session = ctx.get("db_session")
     llm = ctx.get("llm")
     queue = ctx.get("queue")
@@ -47,7 +55,11 @@ async def send_legal_requests(ctx: dict, scan_id: str) -> dict:
 
     scan = await session.get(ScanJob, scan_id)
     if scan is None:
+        logger.warning("send_legal_requests_missing_scan", scan_id=scan_id)
         return {"scan_id": scan_id, "status": "missing_scan"}
+    if is_terminal_scan_status(scan.status):
+        logger.info("send_legal_requests_skipped_terminal", scan_id=scan_id, status=scan.status)
+        return {"scan_id": scan_id, "status": "skipped_terminal", "scan_status": scan.status}
 
     seed = await session.get(Seed, scan.seed_id) if scan.seed_id else None
     seed_value = seed.normalized_value if seed is not None else ""
@@ -91,6 +103,16 @@ async def send_legal_requests(ctx: dict, scan_id: str) -> dict:
 
     scan.current_stage = "inbox_monitoring"
     scan.progress = 90
+    scan.status = "active"
+    session.add(
+        ActivityEvent(
+            id=new_id("evt"),
+            scan_job_id=scan_id,
+            event_type="Legal",
+            message=f"Legal dispatch completed. Notices sent={sent}.",
+            payload={"stage": "legal_dispatch", "sent": sent},
+        )
+    )
     await session.commit()
 
     if queue is not None:
@@ -105,6 +127,7 @@ async def send_legal_requests(ctx: dict, scan_id: str) -> dict:
             "sent": sent,
         },
     )
+    logger.info("send_legal_requests_completed", scan_id=scan_id, notices_sent=sent)
     return {"scan_id": scan_id, "status": "ok", "notices_sent": sent}
 
 

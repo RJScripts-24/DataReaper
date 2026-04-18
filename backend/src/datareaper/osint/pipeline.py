@@ -2,6 +2,8 @@
 
 import asyncio
 import threading
+from collections.abc import Awaitable, Callable
+from urllib.parse import urlparse
 
 import httpx
 
@@ -23,6 +25,8 @@ from datareaper.realtime.publishers import publish
 
 logger = get_logger(__name__)
 DEFAULT_TARGETS = ["Apollo.io", "Spokeo", "Whitepages"]
+SiteFoundCallback = Callable[[dict], Awaitable[None] | None]
+ShouldStopCallback = Callable[[], Awaitable[bool] | bool]
 
 
 async def _run_health_check(browser: PlaywrightClient) -> dict[str, bool]:
@@ -66,6 +70,37 @@ async def _publish_stage(event: dict) -> None:
         logger.debug("osint_publish_failed", event=event)
 
 
+def _site_label_from_url(url: str) -> str:
+    host = urlparse(url).netloc.lower().split(":", 1)[0]
+    if host.startswith("www."):
+        host = host[4:]
+    return host or "unknown"
+
+
+async def _notify_site_found(callback: SiteFoundCallback | None, payload: dict) -> None:
+    if callback is None:
+        return
+    try:
+        result = callback(payload)
+        if asyncio.iscoroutine(result):
+            await result
+    except Exception:
+        logger.debug("osint_site_found_callback_failed", payload=payload)
+
+
+async def _should_stop_scan(callback: ShouldStopCallback | None) -> bool:
+    if callback is None:
+        return False
+    try:
+        result = callback()
+        if asyncio.iscoroutine(result):
+            return bool(await result)
+        return bool(result)
+    except Exception:
+        logger.debug("osint_should_stop_check_failed")
+        return False
+
+
 def _run_async(coro):
     try:
         asyncio.get_running_loop()
@@ -95,6 +130,8 @@ async def run_osint_loop(
     max_depth: int = 2,
     llm=None,
     browser: PlaywrightClient | None = None,
+    on_site_found: SiteFoundCallback | None = None,
+    should_stop: ShouldStopCallback | None = None,
 ) -> dict:
     cleaned = [str(seed).strip() for seed in seeds if str(seed).strip()]
     if not cleaned:
@@ -144,6 +181,10 @@ async def run_osint_loop(
             }
 
         for depth in range(1, max_depth + 1):
+            if await _should_stop_scan(should_stop):
+                boot_log.append("Stop requested. Ending OSINT crawl loop.")
+                break
+
             if not pending_identifiers:
                 boot_log.append("No new identifiers left to pivot.")
                 break
@@ -171,8 +212,18 @@ async def run_osint_loop(
                     if gravatar:
                         for linked in gravatar.get("linked_accounts") or []:
                             url = str(linked.get("url") or "")
-                            if url and url not in discovered_urls:
+                            if url and url not in discovered_urls and url not in newly_discovered_urls:
                                 newly_discovered_urls.add(url)
+                                await _notify_site_found(
+                                    on_site_found,
+                                    {
+                                        "url": url,
+                                        "source": "gravatar",
+                                        "site": _site_label_from_url(url),
+                                        "data_types": ["Email"],
+                                        "confidence": 82,
+                                    },
+                                )
                         username = gravatar.get("preferred_username")
                         if username:
                             discovered_usernames.add(str(username).strip().lower())
@@ -207,8 +258,18 @@ async def run_osint_loop(
                         continue
                     accounts_by_url[key] = account_row
                     new_accounts.append(account_row)
-                    if url and url not in discovered_urls:
+                    if url and url not in discovered_urls and url not in newly_discovered_urls:
                         newly_discovered_urls.add(url)
+                        await _notify_site_found(
+                            on_site_found,
+                            {
+                                "url": url,
+                                "source": "holehe",
+                                "site": _site_label_from_url(url),
+                                "data_types": ["Email"],
+                                "confidence": int(account_row.get("confidence") or 85),
+                            },
+                        )
 
             boot_log.append(
                 f"Layer 1 (holehe): discovered {len(new_accounts)} new account record(s)."
@@ -269,8 +330,18 @@ async def run_osint_loop(
                             accounts_by_url[account_key] = account_row
                             new_accounts.append(account_row)
 
-                        if url and url not in discovered_urls:
+                        if url and url not in discovered_urls and url not in newly_discovered_urls:
                             newly_discovered_urls.add(url)
+                            await _notify_site_found(
+                                on_site_found,
+                                {
+                                    "url": url,
+                                    "source": "github_email_lookup",
+                                    "site": _site_label_from_url(url),
+                                    "data_types": ["Email"],
+                                    "confidence": 92,
+                                },
+                            )
 
             boot_log.append(
                 f"Layer 1.55 (github email lookup): {len(github_email_usernames)} username(s) "
@@ -281,8 +352,18 @@ async def run_osint_loop(
             platform_hits = await probe_usernames(platform_candidates, active_browser)
             for hit in platform_hits:
                 url = str(hit.get("url") or "")
-                if url and url not in discovered_urls:
+                if url and url not in discovered_urls and url not in newly_discovered_urls:
                     newly_discovered_urls.add(url)
+                    await _notify_site_found(
+                        on_site_found,
+                        {
+                            "url": url,
+                            "source": "platform_probe",
+                            "site": _site_label_from_url(url),
+                            "data_types": ["Email"],
+                            "confidence": 90,
+                        },
+                    )
 
                 uname = str(hit.get("username") or "").strip().lower()
                 if uname:
@@ -325,8 +406,22 @@ async def run_osint_loop(
                 if twitter_username:
                     discovered_usernames.add(twitter_username.lstrip("@").lower())
                 blog_url = str(pivot.get("blog") or "").strip()
-                if blog_url.startswith("http"):
+                if (
+                    blog_url.startswith("http")
+                    and blog_url not in discovered_urls
+                    and blog_url not in newly_discovered_urls
+                ):
                     newly_discovered_urls.add(blog_url)
+                    await _notify_site_found(
+                        on_site_found,
+                        {
+                            "url": blog_url,
+                            "source": "github_pivot",
+                            "site": _site_label_from_url(blog_url),
+                            "data_types": ["Email"],
+                            "confidence": 76,
+                        },
+                    )
 
             boot_log.append(
                 "Layer 1.6 (github api): "
@@ -348,9 +443,19 @@ async def run_osint_loop(
                     logger.warning("osint_search_probe_failed", error=str(result))
                     continue
                 for url in result:
-                    if url and url not in discovered_urls:
+                    if url and url not in discovered_urls and url not in newly_discovered_urls:
                         layer2_urls.add(url)
                         newly_discovered_urls.add(url)
+                        await _notify_site_found(
+                            on_site_found,
+                            {
+                                "url": url,
+                                "source": "search_probe",
+                                "site": _site_label_from_url(url),
+                                "data_types": ["Email"],
+                                "confidence": 72,
+                            },
+                        )
 
             boot_log.append(
                 f"Layer 2 (search probe): discovered {len(layer2_urls)} new URL(s)."
@@ -370,8 +475,18 @@ async def run_osint_loop(
                     paste_urls = await search_paste_sites(email_seed, active_browser)
                     paste_total += len(paste_urls)
                     for url in paste_urls:
-                        if url and url not in discovered_urls:
+                        if url and url not in discovered_urls and url not in newly_discovered_urls:
                             newly_discovered_urls.add(url)
+                            await _notify_site_found(
+                                on_site_found,
+                                {
+                                    "url": url,
+                                    "source": "paste_site",
+                                    "site": _site_label_from_url(url),
+                                    "data_types": ["Email"],
+                                    "confidence": 80,
+                                },
+                            )
                 boot_log.append(f"Layer 2.8 (paste sites): {paste_total} URL(s) found.")
             else:
                 paste_total = 0
@@ -399,8 +514,18 @@ async def run_osint_loop(
 
                 for same_as_url in result.get("same_as_urls") or []:
                     url_val = str(same_as_url).strip()
-                    if url_val and url_val not in discovered_urls:
+                    if url_val and url_val not in discovered_urls and url_val not in newly_discovered_urls:
                         newly_discovered_urls.add(url_val)
+                        await _notify_site_found(
+                            on_site_found,
+                            {
+                                "url": url_val,
+                                "source": "profile_scraper",
+                                "site": _site_label_from_url(url_val),
+                                "data_types": ["Email"],
+                                "confidence": 84,
+                            },
+                        )
 
                 for username in result.get("discovered_usernames", []) or []:
                     value = str(username).strip().lower()

@@ -53,15 +53,29 @@ async def build_report_snapshot_job(ctx) -> dict:
 
 async def sync_active_scan_inboxes_job(ctx) -> dict:
     queue = ctx.get("queue")
+    battle_repo = ctx.get("battle_repo")
     if queue is None:
         return {"status": "skipped", "reason": "missing_queue"}
+    if battle_repo is None:
+        return {"status": "skipped", "reason": "missing_battle_repo"}
 
     active_scan_ids = await _load_active_scan_ids()
     enqueued = 0
+    skipped_no_threads = 0
     for scan_id in active_scan_ids:
+        threads = await battle_repo.get_active_email_threads(scan_id)
+        has_gmail_thread = any(bool(thread.get("gmail_thread_id")) for thread in threads)
+        if not has_gmail_thread:
+            skipped_no_threads += 1
+            continue
         await queue.enqueue("sync_inbox", scan_id=scan_id)
         enqueued += 1
-    return {"status": "ok", "scans": len(active_scan_ids), "enqueued": enqueued}
+    return {
+        "status": "ok",
+        "scans": len(active_scan_ids),
+        "enqueued": enqueued,
+        "skipped_no_gmail_threads": skipped_no_threads,
+    }
 
 
 class WorkerSettings:
@@ -78,6 +92,7 @@ class WorkerSettings:
         cron(sync_active_scan_inboxes_job, minute=ACTIVE_SCAN_SYNC_MINUTES),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().effective_arq_redis_url)
+    job_timeout = 1800
 
     @staticmethod
     async def on_startup(ctx) -> None:

@@ -14,6 +14,17 @@ from datareaper.realtime.publishers import publish
 logger = get_logger(__name__)
 
 
+def _is_syncable_gmail_thread_id(thread_id: str | None) -> bool:
+    if not thread_id:
+        return False
+    value = str(thread_id).strip()
+    if not value:
+        return False
+    if value.startswith("thread_") or "_" in value:
+        return False
+    return len(value) >= 10
+
+
 async def sync_inbox_for_scan(scan_id: str, battle_repo: BattleRepository, llm) -> list[dict]:
     required_methods = [
         "get_active_email_threads",
@@ -35,7 +46,13 @@ async def sync_inbox_for_scan(scan_id: str, battle_repo: BattleRepository, llm) 
 
     for thread in active_threads:
         gmail_thread_id = thread.get("gmail_thread_id")
-        if not gmail_thread_id:
+        if not _is_syncable_gmail_thread_id(gmail_thread_id):
+            logger.debug(
+                "sync_inbox_skipping_non_gmail_thread",
+                scan_id=scan_id,
+                thread_id=thread.get("thread_id"),
+                gmail_thread_id=gmail_thread_id,
+            )
             continue
         try:
             messages = gmail_client.get_thread_messages(gmail_thread_id)

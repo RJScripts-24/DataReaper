@@ -23,6 +23,7 @@ type UseRealtimeSubscriptionOptions = {
   channels: RealtimeChannel[];
   onEvent?: (event: RealtimeEventEnvelope) => void;
   enabled?: boolean;
+  directUrl?: string;
 };
 
 export function useRealtimeSubscription({
@@ -30,6 +31,7 @@ export function useRealtimeSubscription({
   channels,
   onEvent,
   enabled = true,
+  directUrl,
 }: UseRealtimeSubscriptionOptions): RealtimeConnectionStatus {
   const [status, setStatus] = useState<RealtimeConnectionStatus>("idle");
   const onEventRef = useRef(onEvent);
@@ -87,23 +89,28 @@ export function useRealtimeSubscription({
       setStatus(reconnectAttempt === 0 ? "connecting" : "reconnecting");
 
       try {
-        const descriptor = await createRealtimeConnection({
-          scanId,
-          channels,
-          preferredTransport: "websocket",
-        });
+        let endpointUrl: URL;
+        if (directUrl) {
+          endpointUrl = new URL(directUrl);
+        } else {
+          const descriptor = await createRealtimeConnection({
+            scanId,
+            channels,
+            preferredTransport: "websocket",
+          });
 
-        if (disposed) {
-          return;
+          if (disposed) {
+            return;
+          }
+
+          if (descriptor.transport !== "websocket") {
+            setStatus("error");
+            return;
+          }
+
+          endpointUrl = new URL(descriptor.endpoint);
+          endpointUrl.searchParams.set("token", descriptor.token);
         }
-
-        if (descriptor.transport !== "websocket") {
-          setStatus("error");
-          return;
-        }
-
-        const endpointUrl = new URL(descriptor.endpoint);
-        endpointUrl.searchParams.set("token", descriptor.token);
 
         socket = new WebSocket(endpointUrl.toString());
 
@@ -114,16 +121,63 @@ export function useRealtimeSubscription({
 
         socket.onmessage = (rawEvent) => {
           try {
-            const parsed = JSON.parse(String(rawEvent.data)) as Partial<RealtimeEventEnvelope>;
-            if (typeof parsed.event !== "string" || typeof parsed.scanId !== "string") {
+            const parsed = JSON.parse(String(rawEvent.data)) as
+              | (Partial<RealtimeEventEnvelope> & Record<string, unknown>)
+              | Record<string, unknown>;
+
+            const eventName =
+              typeof (parsed as { event?: unknown }).event === "string"
+                ? ((parsed as { event: string }).event as string)
+                : typeof (parsed as { type?: unknown }).type === "string"
+                  ? ((parsed as { type: string }).type as string)
+                  : null;
+
+            const scanIdentifier =
+              typeof (parsed as { scanId?: unknown }).scanId === "string"
+                ? ((parsed as { scanId: string }).scanId as string)
+                : typeof (parsed as { scan_id?: unknown }).scan_id === "string"
+                  ? ((parsed as { scan_id: string }).scan_id as string)
+                  : null;
+
+            if (!eventName || !scanIdentifier) {
               return;
             }
 
+            const occurredAt =
+              typeof (parsed as { occurredAt?: unknown }).occurredAt === "string"
+                ? ((parsed as { occurredAt: string }).occurredAt as string)
+                : typeof (parsed as { created_at?: unknown }).created_at === "string"
+                  ? ((parsed as { created_at: string }).created_at as string)
+                  : new Date().toISOString();
+
+            const explicitPayload = (parsed as { payload?: unknown }).payload;
+            let payload: Record<string, unknown> = {};
+
+            if (typeof explicitPayload === "object" && explicitPayload) {
+              payload = explicitPayload as Record<string, unknown>;
+            } else {
+              const raw = parsed as Record<string, unknown>;
+              payload = Object.fromEntries(
+                Object.entries(raw).filter(
+                  ([key]) =>
+                    ![
+                      "event",
+                      "type",
+                      "occurredAt",
+                      "created_at",
+                      "scanId",
+                      "scan_id",
+                      "payload",
+                    ].includes(key)
+                )
+              );
+            }
+
             onEventRef.current?.({
-              event: parsed.event,
-              occurredAt: typeof parsed.occurredAt === "string" ? parsed.occurredAt : new Date().toISOString(),
-              scanId: parsed.scanId,
-              payload: typeof parsed.payload === "object" && parsed.payload ? parsed.payload : {},
+              event: eventName,
+              occurredAt,
+              scanId: scanIdentifier,
+              payload,
             });
           } catch {
             // Ignore malformed messages to keep the stream alive.
@@ -180,7 +234,7 @@ export function useRealtimeSubscription({
         socket.close();
       }
     };
-  }, [scanId, channelKey, enabled]);
+  }, [scanId, channelKey, enabled, directUrl]);
 
   return status;
 }

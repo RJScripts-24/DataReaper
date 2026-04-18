@@ -8,8 +8,9 @@ from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
-from datareaper.api.deps import DbSession, get_onboarding_service
+from datareaper.api.deps import DbSession, get_onboarding_service, get_scan_service
 from datareaper.core.config import get_settings
 from datareaper.core.exceptions import DataReaperError, InvalidSeedError, ResourceNotFoundError
 from datareaper.core.logging import get_logger
@@ -55,6 +56,7 @@ from datareaper.schemas.api_v1 import (
     ThreatBreakdownItem,
 )
 from datareaper.services.onboarding_service import OnboardingService
+from datareaper.services.scan_service import ScanService
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -65,6 +67,10 @@ _SESSION_TTL = timedelta(hours=8)
 _SESSIONS: dict[str, datetime] = {}
 _MANUAL_MESSAGES: dict[tuple[str, str], list[EngagementMessage]] = {}
 T = TypeVar("T")
+
+
+class StopScanRequest(BaseModel):
+    reason: str | None = None
 
 
 def _api_error(status_code: int, code: str, message: str, details: list[dict[str, Any]] | None = None) -> JSONResponse:
@@ -99,8 +105,10 @@ def _scan_status(internal_status: str | None, current_stage: str | None) -> str:
 
     if status in {"completed", "resolved"}:
         return "completed"
-    if status in {"failed", "error", "cancelled"}:
+    if status in {"failed", "error"}:
         return "failed"
+    if status in {"cancelled", "stopped"}:
+        return "cancelled"
     if status in {"queued"}:
         return "queued"
     if status in {"discovering", "identifying", "engaging", "stabilizing"}:
@@ -290,6 +298,22 @@ async def get_scan(scanId: str, db: DbSession):
         createdAt=created,
         updatedAt=updated,
     )
+
+
+@router.post("/scans/{scanId}/actions/stop")
+async def stop_scan(
+    scanId: str,
+    payload: StopScanRequest,
+    db: DbSession,
+    service: ScanService = Depends(get_scan_service),
+):
+    stopped = await service.stop_scan(db, scanId, reason=payload.reason)
+    return {
+        "scanId": scanId,
+        "status": stopped.get("status", "cancelled"),
+        "currentStage": stopped.get("current_stage", "stopped_by_user"),
+        "progress": int(stopped.get("progress", 0)),
+    }
 
 
 @router.get("/scans/{scanId}/dashboard/summary", response_model=DashboardSummary)

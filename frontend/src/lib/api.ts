@@ -31,6 +31,17 @@ export async function createScan(payload: CreateScanRequest): Promise<CreateScan
   return data;
 }
 
+export async function stopScan(
+  scanId: string,
+  reason?: string
+): Promise<{ scanId: string; status: string; currentStage: string; progress: number }> {
+  const { data } = await apiClient.post<{ scanId: string; status: string; currentStage: string; progress: number }>(
+    `/v1/scans/${scanId}/actions/stop`,
+    { reason: reason ?? null }
+  );
+  return data;
+}
+
 export async function getScan(scanId: string): Promise<Scan> {
   const { data } = await apiClient.get<Scan>(`/v1/scans/${scanId}`);
   return data;

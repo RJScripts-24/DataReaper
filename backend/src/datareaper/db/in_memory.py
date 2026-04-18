@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import UTC, datetime
+
+from datareaper.core.ids import new_id
 
 
 class InMemoryStore:
@@ -28,6 +31,42 @@ class InMemoryStore:
         bundle = self._scans.get(scan_id, {})
         thread = bundle.get("threads", {}).get(target_id)
         return deepcopy(thread) if thread else None
+
+    def update_scan_status(
+        self,
+        scan_id: str,
+        *,
+        status: str | None = None,
+        current_stage: str | None = None,
+        progress: int | None = None,
+    ) -> dict | None:
+        bundle = self._scans.get(scan_id)
+        if bundle is None:
+            return None
+        scan = bundle.setdefault("scan", {})
+        if status is not None:
+            scan["status"] = status
+        if current_stage is not None:
+            scan["current_stage"] = current_stage
+        if progress is not None:
+            scan["progress"] = progress
+        return deepcopy(bundle)
+
+    def append_event(self, scan_id: str, event_type: str, message: str, payload: dict | None = None) -> dict | None:
+        bundle = self._scans.get(scan_id)
+        if bundle is None:
+            return None
+        events = bundle.setdefault("events", [])
+        events.append(
+            {
+                "id": new_id("evt"),
+                "type": event_type,
+                "message": message,
+                "created_at": datetime.now(UTC).isoformat(),
+                "payload": payload or {},
+            }
+        )
+        return deepcopy(bundle)
 
 
 memory_store = InMemoryStore()
