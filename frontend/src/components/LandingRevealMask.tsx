@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, ReactNode } from 'react';
+import { RevealContext } from '../contexts/RevealContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export function LandingRevealMask({ children }: { children: ReactNode }) {
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
 
   const [done, setDone] = useState(false);
+  const [almostDone, setAlmostDone] = useState(false);
 
   useLayoutEffect(() => {
     if (done) return;
@@ -90,10 +92,18 @@ export function LandingRevealMask({ children }: { children: ReactNode }) {
     let rafId: number;
     let finished = false;
 
+    const maxTime = strokes.length > 0 ? Math.max(...strokes.map((s) => s.startMs + s.durationMs)) : 0;
+    let almostDoneTriggered = false;
+
     function animate(ts: number) {
       if (finished) return;
       if (!startTime) startTime = ts;
       const elapsed = ts - startTime;
+
+      if (!almostDoneTriggered && elapsed >= maxTime - 500) {
+        setAlmostDone(true);
+        almostDoneTriggered = true;
+      }
 
       // ── 1. Repaint paper cover on visible canvas ──────────────────────────
       ctx.globalCompositeOperation = 'source-over';
@@ -146,6 +156,10 @@ export function LandingRevealMask({ children }: { children: ReactNode }) {
       if (!allDone) {
         rafId = requestAnimationFrame(animate);
       } else {
+        if (!almostDoneTriggered) {
+          setAlmostDone(true);
+          almostDoneTriggered = true;
+        }
         finished = true;
         setTimeout(() => {
           fadeOut(canvas, () => {
@@ -166,10 +180,10 @@ export function LandingRevealMask({ children }: { children: ReactNode }) {
     };
   }, [done]);
 
-  if (done) return <>{children}</>;
+  if (done) return <RevealContext.Provider value={{done: true, almostDone: true}}>{children}</RevealContext.Provider>;
 
   return (
-    <>
+    <RevealContext.Provider value={{done: false, almostDone}}>
       {children}
       <canvas
         ref={canvasRef}
@@ -182,7 +196,7 @@ export function LandingRevealMask({ children }: { children: ReactNode }) {
           display: 'block',
         }}
       />
-    </>
+    </RevealContext.Provider>
   );
 }
 

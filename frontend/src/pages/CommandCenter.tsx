@@ -18,6 +18,7 @@ import {
 } from "../lib/hooks";
 import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { useRealtimeSubscription, type RealtimeConnectionStatus } from "../lib/wsClient";
+import { ReaperCursor } from "../components/ReaperCursor";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -438,11 +439,27 @@ export default function CommandCenter() {
           </div>
 
           <div className="hidden md:flex items-center gap-8">
-            <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70">Dashboard</button>
-            <button onClick={() => navigate("/war-room")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">
+            <button 
+              className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70"
+              data-reaper-expression="happy"
+              data-reaper-phrases="Dashboard view. I see everything from up here.||The operations center is humming with activity."
+            >
+              Dashboard
+            </button>
+            <button 
+              onClick={() => navigate("/war-room")} 
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
+              data-reaper-expression="thinking"
+              data-reaper-phrases="To the War Room! Let's initiate some disputes.||Tactical transition. Let's get aggressive."
+            >
               War Room
             </button>
-            <button onClick={() => navigate("/identity-graph")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">
+            <button 
+              onClick={() => navigate("/identity-graph")} 
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
+              data-reaper-expression="thinking"
+              data-reaper-phrases="Viewing the web of connections.||Time to see who's really hiding behind the data."
+            >
               Identity Graph
             </button>
           </div>
@@ -466,6 +483,8 @@ export default function CommandCenter() {
                 clearActiveScan();
                 navigate("/onboarding");
               }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="A new target? I'm always hungry for more.||Let's fire up a fresh sequence.||Resetting coordinates for a new hunt."
             >
               Start New Scan
             </button>
@@ -508,7 +527,11 @@ export default function CommandCenter() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div 
+          className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4"
+          data-reaper-expression="thinking"
+          data-reaper-phrases="Numbers don't lie. They're definitely leaking your data.||Look at that spike. Someone just sold your address again.||The statistics of your digital betrayal.||I love tracking the fallout."
+        >
           <StatCard
             icon={<Activity className="w-5 h-5" />}
             title="Brokers Scanned"
@@ -553,7 +576,12 @@ export default function CommandCenter() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-4">
           <div className="flex flex-col gap-4">
-            <div className="hand-drawn-card p-4" style={{ backgroundColor: COLORS.card }}>
+            <div 
+              className="hand-drawn-card p-4" 
+              style={{ backgroundColor: COLORS.card }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="Your digital trail is leaking everywhere. It's almost impressive.||Threat levels are elevated. Stay alert.||I've never seen so many location traces before!"
+            >
               <PressureText as="h3" className="text-2xl mb-3" style={{ fontFamily: "'Caveat', cursive" }}>
                 Threat Intelligence
               </PressureText>
@@ -579,7 +607,12 @@ export default function CommandCenter() {
               </div>
             </div>
 
-            <div className="hand-drawn-card p-4" style={{ backgroundColor: COLORS.card }}>
+            <div 
+              className="hand-drawn-card p-4" 
+              style={{ backgroundColor: COLORS.card }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="My minions are working hard. Look at that efficiency!||Deploying digital scouts to every corner of the web.||I've got an eye on every process. No room for error.||Digital recon in progress. They're finding the leaks."
+            >
               <PressureText as="h3" className="text-2xl mb-3" style={{ fontFamily: "'Caveat', cursive" }}>
                 Agent Status
               </PressureText>
@@ -603,7 +636,12 @@ export default function CommandCenter() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="hand-drawn-card p-5 relative" style={{ backgroundColor: COLORS.card }}>
+            <div 
+              className="hand-drawn-card p-5 relative" 
+              style={{ backgroundColor: COLORS.card }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="Target ping! I've localized another broker.||The radar is lighting up. They're all around us.||I love it when they show up on my scope."
+            >
               <div className="w-full flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <PressureText as="h3" className="text-2xl" style={{ fontFamily: "'Caveat', cursive" }}>
@@ -632,7 +670,12 @@ export default function CommandCenter() {
               <div className="relative w-full flex justify-center py-3">{radarSvg}</div>
             </div>
 
-            <div className="hand-drawn-card p-4" style={{ backgroundColor: COLORS.card }}>
+            <div 
+              className="hand-drawn-card p-4" 
+              style={{ backgroundColor: COLORS.card }}
+              data-reaper-expression="thinking"
+              data-reaper-phrases="The web of lies is unraveling. I can see the connections now.||One lead leads to another. They can't hide from my logic.||The trail of digital rot is getting clearer.||Mapping the betrayal. Every node is a broker's secret."
+            >
               <PressureText as="h3" className="text-2xl mb-2" style={{ fontFamily: "'Caveat', cursive" }}>
                 Intelligence Pivot Chain
               </PressureText>
@@ -680,6 +723,8 @@ export default function CommandCenter() {
             <div
               className="hand-drawn-card pencil-fill-dark p-4 flex flex-col"
               style={{ borderTop: `3px solid ${COLORS.blue}`, boxShadow: "inset 0 0 30px rgba(74, 111, 165, 0.15)" }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="Live feed of the digital hunt. Satisfying, isn't it?||Watch the logs. Every entry is a small victory.||My minions are reporting in. They're doing well."
             >
               <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: "1.5px dashed rgba(255,255,255,0.2)" }}>
                 <span className="pencil-heading-light text-lg" style={{ color: "#a8c0e6" }}>
@@ -742,6 +787,8 @@ export default function CommandCenter() {
               exit={{ scale: 0.95, y: 20 }}
               className="w-full max-w-[880px] bg-[#fdfbf7] p-8 rounded-2xl"
               style={{ border: "1.5px solid rgba(0,0,0,0.15)", boxShadow: "10px 10px 0 rgba(0,0,0,0.05)" }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="Look at them all scurrying! They don't even know I'm here.||Expanded vision. I see the whole battlefield now.||Target saturation achieved. My radar never misses a ping.||The hunt is going global. Look at all those leads."
             >
               <div className="flex items-center justify-between mb-6">
                 <PressureText as="h2" className="text-4xl" style={{ fontFamily: "'Caveat', cursive" }}>
@@ -788,6 +835,8 @@ export default function CommandCenter() {
               exit={{ scale: 0.95, y: 20 }}
               className="w-full max-w-[920px] h-[80vh] bg-[#1a1a1a] p-8 rounded-2xl flex flex-col"
               style={{ border: "1.5px solid rgba(255,255,255,0.15)" }}
+              data-reaper-expression="default"
+              data-reaper-phrases="Deep dive into the system pulse.||Every byte tells a story of betrayal.||The archive of their digital sins is growing.||I'm cataloging every failure. No one gets a clean record."
             >
               <div className="mb-6 pb-4 border-b border-white/10">
                 <PressureText as="h2" className="text-4xl text-white" style={{ fontFamily: "'Caveat', cursive" }}>
@@ -826,6 +875,7 @@ export default function CommandCenter() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
       `}</style>
+      <ReaperCursor />
     </div>
   );
 }

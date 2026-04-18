@@ -111,42 +111,67 @@ export function ProcessFlowSection() {
       </div>
 
       <div style={{ maxWidth: "1160px", margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "40px" }}>
-        {agents.map((agent, index) => (
-          <motion.div
-            key={index}
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7, delay: index * 0.2 }}
-            className="hand-drawn-card"
-            style={{
-              padding: "40px 32px",
-              backgroundColor: "rgba(255,255,255,0.4)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              textAlign: "center"
-            }}
-          >
-            <div style={{ width: "120px", height: "120px", marginBottom: "24px", backgroundColor: "#fff", borderRadius: "50%", padding: "20px", border: "3px solid #333", boxShadow: "4px 4px 0 rgba(0,0,0,0.2)" }}>
-              {agent.svg}
-            </div>
-            
-            <PressureText as="h3" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "2rem", marginBottom: "8px", display: "block" }}>
-              {agent.title}
-            </PressureText>
-            
-            <div style={{ backgroundColor: "rgba(255,255,255,0.6)", padding: "4px 12px", borderRadius: "100px", border: "1.5px solid #333", marginBottom: "20px" }}>
-              <PressureText as="span" variant="lite" className="paper-text" style={{ fontSize: "16px", letterSpacing: "0.05em", textTransform: "uppercase", display: "block" }}>
-                {agent.role}
-              </PressureText>
-            </div>
+        {agents.map((agent, index) => {
+          const getReaperData = () => {
+            if (agent.title.includes("Sleuth")) {
+              return {
+                expression: "thinking",
+                phrases: "He's my best scout. Found things even I missed.||Scanning the shadows...||No proxy can hide from him.||He's the eyes of the operation."
+              };
+            }
+            if (agent.title.includes("Legal")) {
+              return {
+                expression: "thinking",
+                phrases: "Boring, but effective. He's got a lawyer's cold heart.||Filing the digital lawsuits.||The law is a scythe in his hands.||He speaks fluent 'fine print'."
+              };
+            }
+            return {
+              expression: "happy",
+              phrases: "He loves a good argument. Squashing broker resistance.||Inbox combat in progress.||Fighting the good fight.||Deleting their emails is his hobby."
+            };
+          };
 
-            <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "20px", lineHeight: 1.4, fontWeight: 500, margin: 0 }}>
-              {agent.desc}
-            </PressureText>
-          </motion.div>
-        ))}
+          const reaperData = getReaperData();
+
+          return (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, delay: index * 0.2 }}
+              className="hand-drawn-card"
+              data-reaper-expression={reaperData.expression}
+              data-reaper-phrases={reaperData.phrases}
+              style={{
+                padding: "40px 32px",
+                backgroundColor: "rgba(255,255,255,0.4)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                textAlign: "center"
+              }}
+            >
+              <div style={{ width: "120px", height: "120px", marginBottom: "24px", backgroundColor: "#fff", borderRadius: "50%", padding: "20px", border: "3px solid #333", boxShadow: "4px 4px 0 rgba(0,0,0,0.2)" }}>
+                {agent.svg}
+              </div>
+              
+              <PressureText as="h3" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "2rem", marginBottom: "8px", display: "block" }}>
+                {agent.title}
+              </PressureText>
+              
+              <div style={{ backgroundColor: "rgba(255,255,255,0.6)", padding: "4px 12px", borderRadius: "100px", border: "1.5px solid #333", marginBottom: "20px" }}>
+                <PressureText as="span" variant="lite" className="paper-text" style={{ fontSize: "16px", letterSpacing: "0.05em", textTransform: "uppercase", display: "block" }}>
+                  {agent.role}
+                </PressureText>
+              </div>
+
+              <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "20px", lineHeight: 1.4, fontWeight: 500, margin: 0 }}>
+                {agent.desc}
+              </PressureText>
+            </motion.div>
+          );
+        })}
       </div>
 
     </section>

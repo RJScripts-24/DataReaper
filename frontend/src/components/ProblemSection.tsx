@@ -51,7 +51,13 @@ export function ProblemSection() {
             >
               Brokers profit off your info. <br/> Opting out is a nightmare.
             </PressureText>
-            <div className="hand-drawn-border" style={{ padding: "24px", marginBottom: "32px", backgroundColor: "rgba(255,255,255,0.4)" }}>
+            <div 
+              className="hand-drawn-border" 
+              style={{ padding: "24px", marginBottom: "32px", backgroundColor: "rgba(255,255,255,0.4)" }}
+              data-reaper-expression="confused"
+              data-reaper-zoom="1.4"
+              data-reaper-phrases="I don't like these brokers.||They think they own you.||Time for a digital harvesting.||I'll slice their servers."
+            >
               <PressureText as="h3" variant="medium" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "1.8rem", marginBottom: "16px", color: "#6360D8", display: "block" }}>
                 ⚠️ The Problem
               </PressureText>
