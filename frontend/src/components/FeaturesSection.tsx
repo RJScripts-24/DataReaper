@@ -95,6 +95,13 @@ export function FeaturesSection() {
                 transition={{ duration: 0.6, delay: i * 0.15 }}
                 className="hand-drawn-card"
                 style={{ padding: "40px 32px", textAlign: "center", backgroundColor: "#fff" }}
+                data-reaper-expression={i === 0 ? "surprised" : (i === 1 ? "thinking" : "happy")}
+                data-reaper-zoom="1.3"
+                data-reaper-phrases={
+                  i === 0 ? "Pings! I love high pings.||Targets detected on the radar.||Look at them squirm." :
+                  (i === 1 ? "Connecting the dots...||A massive web of lies.||I can see the root of this tree." :
+                  "Watch me win.||The Comms Agent is a beast.||Negotiating their surrender.")
+                }
               >
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: "24px" }}>
                   {feat.icon}

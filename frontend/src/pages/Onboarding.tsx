@@ -7,6 +7,7 @@ import { PressureFilter } from "../components/PressureFilter";
 import { ApiClientError } from "../lib/apiClient";
 import apiClient from "../lib/apiClient";
 import { useScanContext } from "../lib/scanContext";
+import { ReaperCursor } from "../components/ReaperCursor";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -75,19 +76,21 @@ export default function Onboarding() {
           transition={{ duration: 1.2, delay: 0.2 }}
           className="text-center relative flex flex-col items-center mb-12"
         >
-          <PressureText
-            as="h2"
-            variant="strong"
-            className="paper-text"
-            style={{
-              fontFamily: "'Dancing Script', cursive",
-              fontSize: "clamp(3.5rem, 6vw, 5rem)",
-              transform: "rotate(-1deg)",
-              letterSpacing: "0.02em",
-            }}
-          >
-            Welcome, Operative.
-          </PressureText>
+            <PressureText
+              as="h2"
+              variant="strong"
+              className="paper-text"
+              style={{
+                fontFamily: "'Dancing Script', cursive",
+                fontSize: "clamp(3.5rem, 6vw, 5rem)",
+                transform: "rotate(-1deg)",
+                letterSpacing: "0.02em",
+              }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="Operative. I'll be your digital handler.||Everything you enter remains in the vault.||The scan is strictly confidential."
+            >
+              Welcome, Operative.
+            </PressureText>
           <PressureText
             as="p"
             variant="lite"
@@ -104,6 +107,8 @@ export default function Onboarding() {
         {/* Illustrations are absolute, they don't affect flex flow */}
         <div
           className="absolute left-[2vw] top-[20vh] hidden lg:block"
+          data-reaper-expression="thinking"
+          data-reaper-phrases="Sleuth Agent waiting for orders.||Look at that cute little scythe.||Recon phase incoming.||He's already sniffing for your data trail."
         >
           <img
             src="/images/onboarding-sleuth-dome.png"
@@ -114,6 +119,8 @@ export default function Onboarding() {
 
         <div
           className="absolute right-[2vw] bottom-[15vh] hidden lg:block"
+          data-reaper-expression="happy"
+          data-reaper-phrases="The Security Shield. Nothing gets past us.||Your fortress in the digital wasteland.||Defense systems online.||Safe and sound under my watch."
         >
           <img
             src="/images/onboarding-shield-dome.png"
@@ -162,6 +169,8 @@ export default function Onboarding() {
                       filter: "url(#pencil-sketch)",
                       paddingLeft: "4px"
                     }}
+                    data-reaper-expression="thinking"
+                    data-reaper-phrases="Searching for digital rot...||Type carefully, Operative.||I'm ready to track this down.||Enter your target lead."
                   />
                   <div
                     className="absolute bottom-0 left-0 w-full h-[2px] bg-[#a8a5f0] opacity-0 group-focus-within:opacity-100 transition-opacity"
@@ -193,14 +202,19 @@ export default function Onboarding() {
                 )}
 
                 {inputError && (
-                  <PressureText
-                    as="p"
-                    variant="lite"
-                    className="paper-text mb-6 text-lg"
-                    style={{ fontFamily: "'Patrick Hand', cursive", color: "#b94a48" }}
+                  <div
+                    data-reaper-expression="sad"
+                    data-reaper-phrases="Invalid input. My scythe missed the target.||That doesn't look like a real data trail.||Check your typing, Operative. I'm getting nothing."
                   >
-                    {inputError}
-                  </PressureText>
+                    <PressureText
+                      as="p"
+                      variant="lite"
+                      className="paper-text mb-6 text-lg"
+                      style={{ fontFamily: "'Patrick Hand', cursive", color: "#b94a48" }}
+                    >
+                      {inputError}
+                    </PressureText>
+                  </div>
                 )}
 
                 <motion.button
@@ -209,6 +223,9 @@ export default function Onboarding() {
                   whileHover={{ scale: input.trim() && !isLaunching ? 1.02 : 1, rotate: -0.5 }}
                   whileTap={{ scale: input.trim() && !isLaunching ? 0.98 : 1 }}
                   className="w-full py-5 hand-drawn-button text-2xl"
+                  style={{ opacity: !input.trim() || createScanMutation.isPending ? 0.5 : 1 }}
+                  data-reaper-expression="happy"
+                  data-reaper-phrases="Initiate the hunt.||Release the Sleuth Agent!||Let's burn their data logs.||No mercy for brokers."
                   style={{ opacity: !input.trim() || isLaunching ? 0.5 : 1 }}
                 >
                   <PressureText className="paper-text">
@@ -220,8 +237,12 @@ export default function Onboarding() {
         </div>
       </main>
 
-      {/* Transparent hand-drawn horizon SVG at the bottom */}
-      <div className="absolute bottom-0 left-0 w-full pointer-events-none z-0 overflow-hidden" style={{ height: "160px" }}>
+      <div 
+        className="absolute bottom-0 left-0 w-full pointer-events-none z-0 overflow-hidden" 
+        style={{ height: "160px", pointerEvents: "auto" }}
+        data-reaper-expression="default"
+        data-reaper-phrases="The digital horizon. End of the trail.||Nothing but dust and deleted logs down here.||The wasteland is quiet today."
+      >
         <svg
           viewBox="0 0 1440 160"
           width="100%"
@@ -311,6 +332,7 @@ export default function Onboarding() {
           }
         }
       `}</style>
+      <ReaperCursor />
     </div>
   );
 

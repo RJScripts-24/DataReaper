@@ -14,6 +14,7 @@ import {
 } from "../lib/hooks";
 import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { useRealtimeSubscription, type RealtimeConnectionStatus } from "../lib/wsClient";
+import { ReaperCursor } from "../components/ReaperCursor";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -279,13 +280,29 @@ export default function IdentityGraph() {
           </div>
 
           <div className="hidden md:flex items-center gap-8">
-            <button onClick={() => navigate("/command-center")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">
+            <button 
+              onClick={() => navigate("/command-center")} 
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
+              data-reaper-expression="thinking"
+              data-reaper-phrases="Dashboard view. Checking the bird's eye view.||Back to the command deck."
+            >
               Dashboard
             </button>
-            <button onClick={() => navigate("/war-room")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">
+            <button 
+              onClick={() => navigate("/war-room")} 
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
+              data-reaper-expression="thinking"
+              data-reaper-phrases="Tactic change. Let's go to the War Room.||Disputes are waiting. Let's get aggressive."
+            >
               War Room
             </button>
-            <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70">Identity Graph</button>
+            <button 
+              className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70"
+              data-reaper-expression="happy"
+              data-reaper-phrases="Behold the web of digital decay. It's beautiful.||I see the threads they try to hide.||Connecting the digital dots."
+            >
+              Identity Graph
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
@@ -299,6 +316,8 @@ export default function IdentityGraph() {
                 clearActiveScan();
                 navigate("/onboarding");
               }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="Time for a fresh sequence. New data awaits.||Resetting the graph for a new target sequence."
             >
               Start New Scan
             </button>
@@ -338,7 +357,11 @@ export default function IdentityGraph() {
                 <Filter className="w-4 h-4" />
                 Filter Nodes
               </h4>
-              <div className="space-y-2">
+              <div 
+                className="space-y-2"
+                data-reaper-expression="thinking"
+                data-reaper-phrases="Pruning the tree? Or just narrowing the search?||Filters help, but the data never lies.||Selective vision. Sometimes less is more."
+              >
                 <ToggleButton label="Platforms" enabled={showPlatforms} onToggle={() => setShowPlatforms((value) => !value)} color={COLORS.blue} />
                 <ToggleButton label="Identity Data" enabled={showIdentity} onToggle={() => setShowIdentity((value) => !value)} color={COLORS.orange} />
                 <ToggleButton label="Data Brokers" enabled={showTargets} onToggle={() => setShowTargets((value) => !value)} color={COLORS.red} />
@@ -349,7 +372,11 @@ export default function IdentityGraph() {
               <h4 className="text-base mb-3" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
                 Legend
               </h4>
-              <div className="space-y-2 text-sm">
+              <div 
+                className="space-y-2 text-sm"
+                data-reaper-expression="happy"
+                data-reaper-phrases="Color coding the victims. How organized of you.||The rainbow of digital exposure.||I like the red ones. They're tasty."
+              >
                 <LegendItem color={COLORS.purple} label="Seed" />
                 <LegendItem color={COLORS.blue} label="Platform" />
                 <LegendItem color={COLORS.green} label="Username" />
@@ -360,7 +387,12 @@ export default function IdentityGraph() {
           </div>
         </motion.div>
 
-        <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: COLORS.paper }}>
+        <div 
+          className="flex-1 relative overflow-hidden"
+          data-reaper-expression="thinking"
+          data-reaper-phrases="The web is expanding. Every node is a trace.||I'm weaving the trap. There's no escape from the graph.||Look at all these connections. They thought they were private!||Data relationships. My favorite kind of spiderweb."
+          style={{ backgroundColor: COLORS.paper }}
+        >
           <div
             className="absolute inset-0 opacity-15"
             style={{
@@ -510,6 +542,8 @@ export default function IdentityGraph() {
                 borderLeft: "1.5px dashed rgba(0,0,0,0.15)",
                 borderRadius: "0",
               }}
+              data-reaper-expression="thinking"
+              data-reaper-phrases="Deep dive into this specific node.||What secrets are hiding here?||I can feel the data rot in this entry.||The anatomy of their digital greed."
             >
               <button
                 type="button"
@@ -538,6 +572,8 @@ export default function IdentityGraph() {
                     borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
                     color: getNodeColor(selectedNode.type),
                   }}
+                  data-reaper-expression="thinking"
+                  data-reaper-phrases={`Deep dive into ${selectedNode.label}. Let's see their secrets.||Target analysis in biological detail.||Data extraction in progress.`}
                 >
                   {selectedNode.type}
                 </div>
@@ -578,6 +614,7 @@ export default function IdentityGraph() {
           )}
         </AnimatePresence>
       </div>
+      <ReaperCursor />
     </div>
   );
 }

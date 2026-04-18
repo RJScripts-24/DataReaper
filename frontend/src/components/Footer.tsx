@@ -40,7 +40,12 @@ export function Footer() {
                 DataReaper
               </span>
             </div>
-            <p className="pencil-text-light" style={{ fontSize: "16px", lineHeight: 1.6, maxWidth: "240px" }}>
+            <p 
+              className="pencil-text-light" 
+              style={{ fontSize: "16px", lineHeight: 1.6, maxWidth: "240px" }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="I'll be seeing you.||Keep your data clean.||Your privacy is my prize."
+            >
               An autonomous, multi-agent AI system designed to be your personal privacy "Search & Destroy" unit.
             </p>
           </div>
@@ -88,7 +93,13 @@ export function Footer() {
         </div>
 
         {/* Bottom */}
-        <div className="hand-drawn-border" style={{ borderTop: "2px dashed rgba(255,255,255,0.25)", borderLeft: "none", borderRight: "none", borderBottom: "none", borderRadius: "0 !important", paddingTop: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+        <div 
+          className="hand-drawn-border" 
+          style={{ borderTop: "2px dashed rgba(255,255,255,0.25)", borderLeft: "none", borderRight: "none", borderBottom: "none", borderRadius: "0 !important", paddingTop: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}
+          data-reaper-expression="thinking"
+          data-reaper-phrases="Zzz... data clean... Zzz...||Wake me if a broker acts up.||Scanning in my dreams."
+          data-reaper-zoom="1.2"
+        >
           <span className="pencil-text-light" style={{ fontSize: "16px" }}>© 2026 DataReaper. 100% Free / Open-Source.</span>
           <a href="#" className="pencil-text-light" style={{ fontSize: "16px", textDecoration: "none" }}>Privacy Policy</a>
         </div>

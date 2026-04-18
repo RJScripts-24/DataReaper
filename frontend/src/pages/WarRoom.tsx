@@ -21,6 +21,7 @@ import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { useRealtimeSubscription, type RealtimeConnectionStatus } from "../lib/wsClient";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { type AgentEvent } from "../types/ws";
+import { ReaperCursor } from "../components/ReaperCursor";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -410,13 +411,28 @@ export default function WarRoom() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8">
-            <button onClick={() => navigate("/command-center")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">
+            <button 
+              onClick={() => navigate("/command-center")} 
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
+              data-reaper-expression="thinking"
+              data-reaper-phrases="Switching lenses. Same data, different angle.||Checking the global overview.||Back to the command deck."
+            >
               Dashboard
             </button>
-            <button className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70" aria-current="page">
+            <button 
+              className="text-xl pencil-text transition-colors opacity-100 hover:opacity-70" 
+              aria-current="page"
+              data-reaper-expression="happy"
+              data-reaper-phrases="Tactical view. Every packet, scrutinized.||I like the smell of legal disputes.||The War Room is quite cozy, isn't it?"
+            >
               War Room
             </button>
-            <button onClick={() => navigate("/identity-graph")} className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100">
+            <button 
+              onClick={() => navigate("/identity-graph")} 
+              className="text-xl pencil-text transition-colors opacity-60 hover:opacity-100"
+              data-reaper-expression="thinking"
+              data-reaper-phrases="The full picture. They can't hide.||Connecting the digital dots.||Let's see who's really behind this."
+            >
               Identity Graph
             </button>
           </div>
@@ -432,6 +448,8 @@ export default function WarRoom() {
                 clearActiveScan();
                 navigate("/onboarding");
               }}
+              data-reaper-expression="happy"
+              data-reaper-phrases="Back to base? A fresh hunt begins.||New targets, new data to reap.||Let's fire up a clean scan."
             >
               Start New Scan
             </button>
@@ -489,7 +507,11 @@ export default function WarRoom() {
             </PressureText>
           </div>
 
-          <div className="p-4 space-y-4 overflow-y-auto flex-1">
+          <div 
+            className="p-4 space-y-4 overflow-y-auto flex-1"
+            data-reaper-expression="happy"
+            data-reaper-phrases="The hit list. Watch them squirm.||Multiple targets locked.||Data brokers on the run.||This list will be their undoing.||I've got my scythe ready for these guys."
+          >
             {isLoading && <p style={{ fontFamily: "'Patrick Hand', cursive" }}>Loading engagements...</p>}
             {!isLoading && engagements.length === 0 && (
               <p style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
@@ -593,6 +615,8 @@ export default function WarRoom() {
                   style={{ color: COLORS.red }}
                   onClick={handleEscalate}
                   disabled={!selectedEngagementId || escalateMutation.isPending}
+                  data-reaper-expression="confused"
+                  data-reaper-phrases="Burn it down. No more warnings.||Unleash the legal hounds.||Escalation is my favorite part.||They had their chance."
                 >
                   <Siren className="w-4 h-4" />
                   {escalateMutation.isPending ? "Escalating..." : "Escalate"}
@@ -658,19 +682,21 @@ export default function WarRoom() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[3fr_1fr] gap-3">
-              <input
-                type="text"
-                value={messageInput}
-                onChange={(event) => setMessageInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    void handleSendMessage();
-                  }
-                }}
-                className="hand-drawn-button px-3 py-2 bg-transparent"
-                style={{ fontFamily: "'Patrick Hand', cursive" }}
-                placeholder="Add operator note or outbound response"
-              />
+                <input
+                  type="text"
+                  value={messageInput}
+                  onChange={(event) => setMessageInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      void handleSendMessage();
+                    }
+                  }}
+                  className="hand-drawn-button px-3 py-2 bg-transparent"
+                  style={{ fontFamily: "'Patrick Hand', cursive" }}
+                  placeholder="Add operator note or outbound response"
+                  data-reaper-expression="thinking"
+                  data-reaper-phrases="Drop them a memo. Keep it sharp.||Strategic communication in progress.||Every word counts in this battle.||Writing their digital obituary."
+                />
               <button
                 type="button"
                 className="hand-drawn-button px-3 py-2 flex items-center justify-center gap-2"
@@ -712,6 +738,7 @@ export default function WarRoom() {
           transform: none;
         }
       `}</style>
+      <ReaperCursor />
     </div>
   );
 }

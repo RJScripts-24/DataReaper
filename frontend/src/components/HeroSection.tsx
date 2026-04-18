@@ -46,6 +46,9 @@ export function HeroSection() {
         }}
       >
         <motion.h1
+          data-reaper-expression="happy"
+          data-reaper-zoom="1.35"
+          data-reaper-phrases="Welcome sir!||Search, destroy, reclaim.||Signal locked on your identity footprint.||The hunt begins here."
           style={{
             marginBottom: "26px",
           }}
@@ -97,6 +100,9 @@ export function HeroSection() {
           <button
             onClick={() => navigate("/onboarding")}
             className="group hand-drawn-button"
+            data-reaper-expression="happy"
+            data-reaper-zoom="1.35"
+            data-reaper-phrases="Ready to cross over?||Click to initiate.||Let's get you inside.||All agents standing by."
             style={{
               display: "inline-flex",
               alignItems: "center",

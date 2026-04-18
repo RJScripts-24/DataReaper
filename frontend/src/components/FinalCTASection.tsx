@@ -83,6 +83,9 @@ export function FinalCTASection() {
                   viewport={{ once: true }}
                   transition={{ duration: 0.6, delay: index * 0.1 }}
                   className="hand-drawn-card"
+                  data-reaper-expression="thinking"
+                  data-reaper-zoom="1.35"
+                  data-reaper-phrases="Analyzing this route.||Intel packet identified.||This resource looks promising.||Shall I open this file?"
                   style={{
                     display: "block",
                     overflow: "hidden",
@@ -177,6 +180,9 @@ export function FinalCTASection() {
             transition={{ duration: 0.6, delay: 0.2 }}
             onClick={() => navigate("/onboarding")}
             className="hand-drawn-button"
+            data-reaper-expression="happy"
+            data-reaper-zoom="1.35"
+            data-reaper-phrases="Ready to cross over?||Click to initiate.||Let's get you inside.||Full deployment starts now."
             style={{
               display: "inline-flex",
               alignItems: "center",
