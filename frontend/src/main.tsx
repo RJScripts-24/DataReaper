@@ -1,9 +1,8 @@
 
-  import { useEffect, useState } from "react";
-  import { createRoot } from "react-dom/client";
-  import { QueryClientProvider } from "@tanstack/react-query";
-  import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-  import { Toaster } from "sonner";
+import { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
 
   import App from "./App.tsx";
   import { ReaperCursor } from "./components/ReaperCursor";
@@ -86,7 +85,6 @@
           <App />
           <Toaster position="top-right" richColors />
         </ScanProvider>
-        <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
     );
   }

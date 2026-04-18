@@ -32,6 +32,9 @@ const MOOD_IMAGE_MAP: Record<ReaperMood, string> = {
 
 const DEFAULT_MOOD: ReaperMood = "default";
 const DEFAULT_ZOOM: ReaperZoom = "base";
+const NATIVE_CURSOR_GAP_OFFSET_X = 55;
+const NATIVE_CURSOR_GAP_OFFSET_X_FLIPPED = 49;
+const NATIVE_CURSOR_GAP_OFFSET_Y = 50;
 
 const HOVERABLE_SELECTOR = [
   "[data-reaper-phrases]",
@@ -192,6 +195,7 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
   const [zoom, setZoom] = useState<ReaperZoom>(DEFAULT_ZOOM);
   const [isFacingLeft, setIsFacingLeft] = useState(false);
   const [bubbleSide, setBubbleSide] = useState<"top" | "bottom">("top");
+  const [showNativeCursor, setShowNativeCursor] = useState(false);
 
   const lastX = useRef(0);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -215,7 +219,11 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
       return;
     }
 
-    document.documentElement.classList.add("hide-native-cursor");
+    if (showNativeCursor) {
+      document.documentElement.classList.remove("hide-native-cursor");
+    } else {
+      document.documentElement.classList.add("hide-native-cursor");
+    }
     setIsVisible(true);
 
     if (trackerRef.current) {
@@ -229,7 +237,7 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
     return () => {
       document.documentElement.classList.remove("hide-native-cursor");
     };
-  }, [canRender]);
+  }, [canRender, showNativeCursor]);
 
   useEffect(() => {
     if (!canRender) {
@@ -334,16 +342,27 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
       setZoom(DEFAULT_ZOOM);
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.key.toLowerCase() !== "u") {
+        return;
+      }
+
+      event.preventDefault();
+      setShowNativeCursor((previous) => !previous);
+    };
+
     document.addEventListener("mousemove", handleMove, { passive: true });
     document.addEventListener("mouseover", handleOver);
     document.addEventListener("mouseout", handleOut);
     window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.removeEventListener("mousemove", handleMove);
       document.removeEventListener("mouseover", handleOver);
       document.removeEventListener("mouseout", handleOut);
       window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("keydown", handleKeyDown);
       activeTargetRef.current = null;
     };
   }, [canRender]);
@@ -351,6 +370,9 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
   if (!canRender) {
     return null;
   }
+
+  const nativeCursorOffsetX = isFacingLeft ? NATIVE_CURSOR_GAP_OFFSET_X_FLIPPED : NATIVE_CURSOR_GAP_OFFSET_X;
+  const shellTransform = `${showNativeCursor ? `translate(${nativeCursorOffsetX}px, ${NATIVE_CURSOR_GAP_OFFSET_Y}px) ` : ""}${isFacingLeft ? "scaleX(-1)" : "scaleX(1)"}`;
 
   return (
     <div
@@ -363,7 +385,13 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
         zIndex: 99999
       }}
     >
-      <div className={`reaper-cursor-shell bubble-side-${bubbleSide}`} style={{ transform: isFacingLeft ? 'scaleX(-1)' : 'scaleX(1)', transition: 'transform 0.2s ease-out' }}>
+      <div
+        className={`reaper-cursor-shell bubble-side-${bubbleSide}`}
+        style={{
+          transform: shellTransform,
+          transition: "transform 0.2s ease-out",
+        }}
+      >
         <div className={`reaper-cursor-bubble${bubbleVisible ? "" : " hidden"}`}>
           <div className="bubble-content" style={{ transform: isFacingLeft ? 'scaleX(-1)' : 'scaleX(1)' }}>{bubbleText}</div>
         </div>
