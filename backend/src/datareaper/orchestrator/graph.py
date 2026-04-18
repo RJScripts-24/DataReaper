@@ -5,7 +5,7 @@ def build_default_graph() -> list[str]:
     return [
         "validate_seed",
         "initialize_scan",
-        "email_pivot",
+        "email_probe",
         "username_pivot",
         "identity_assembly",
         "graph_build",

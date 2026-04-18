@@ -13,6 +13,19 @@ from datareaper.db.repositories.scan_repo import ScanRepository
 from datareaper.db.session import SessionLocal
 
 
+def _is_gmail_thread_id(thread_id: str | None) -> bool:
+    if not thread_id:
+        return False
+    value = str(thread_id).strip()
+    if not value:
+        return False
+    # Synthetic/local IDs in this codebase typically look like thread_<shortid>.
+    if value.startswith("thread_") or "_" in value:
+        return False
+    # Gmail thread IDs are opaque but generally long, compact identifiers.
+    return len(value) >= 10
+
+
 class BattleRepository:
     def __init__(self) -> None:
         self.scan_repo = ScanRepository()
@@ -95,12 +108,20 @@ class BattleRepository:
                         )
                         messages = message_result.scalars().all()
                         last_message = messages[-1] if messages else None
+                        last_message_meta = (last_message.metadata_json or {}) if last_message is not None else {}
+                        last_synced_gmail_message_id = (
+                            str(last_message_meta.get("gmail_message_id"))
+                            if last_message_meta.get("gmail_message_id")
+                            else None
+                        )
                         broker_name = case.broker_name
+                        external_thread_id = thread.external_thread_id
+                        gmail_thread_id = external_thread_id if _is_gmail_thread_id(external_thread_id) else None
                         rows.append(
                             {
                                 "thread_id": thread.id,
-                                "gmail_thread_id": thread.external_thread_id or thread.id,
-                                "last_synced_message_id": last_message.id if last_message else None,
+                                "gmail_thread_id": gmail_thread_id,
+                                "last_synced_message_id": last_synced_gmail_message_id,
                                 "target_id": case.id,
                                 "broker_name": broker_name,
                                 "jurisdiction": case.jurisdiction or "DPDP",
@@ -132,7 +153,11 @@ class BattleRepository:
             rows.append(
                 {
                     "thread_id": thread.get("thread_id"),
-                    "gmail_thread_id": thread.get("thread_id"),
+                    "gmail_thread_id": (
+                        thread.get("external_thread_id")
+                        if _is_gmail_thread_id(str(thread.get("external_thread_id") or ""))
+                        else None
+                    ),
                     "last_synced_message_id": (thread.get("messages") or [{}])[-1].get("id")
                     if thread.get("messages")
                     else None,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from datareaper.core.exceptions import DataReaperError, ResourceNotFoundError
 from datareaper.core.logging import get_logger
@@ -51,6 +52,16 @@ def register_error_handlers(app: FastAPI) -> None:
             detail=exc.detail,
         )
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    @app.exception_handler(SQLAlchemyError)
+    async def handle_database_exception(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+        logger.error(
+            "database_exception",
+            method=request.method,
+            path=request.url.path,
+            error=str(exc),
+        )
+        return JSONResponse(status_code=503, content={"detail": "Database temporarily unavailable"})
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:

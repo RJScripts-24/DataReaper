@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from itertools import cycle
 
 from datareaper.brokers.case_builder import build_case
@@ -41,58 +42,29 @@ class Supervisor:
         jurisdiction: str,
     ) -> dict:
         settings = get_settings()
-        if settings.app_env != "production":
-            pipeline = self._fallback_pipeline(normalized_seed, seed_type)
-            brokers = self._fallback_brokers()
-        else:
-            try:
-                # Delay heavy OSINT imports until scan execution so API startup doesn't hard-fail
-                # when optional scraping dependencies are not installed.
-                from datareaper.brokers.discovery import discover_brokers
-                from datareaper.osint.pipeline import run_pipeline
+        timestamp = datetime.now(UTC).isoformat()
+        pivot = normalized_seed.split("@", 1)[0] if seed_type == "email" else normalized_seed
 
-                pipeline = run_pipeline(normalized_seed)
-                brokers = discover_brokers(pipeline["identity"])
-            except Exception as exc:  # pragma: no cover - depends on runtime integrations
-                logger.warning("osint_pipeline_fallback", error=str(exc))
-                pipeline = self._fallback_pipeline(normalized_seed, seed_type)
-                brokers = self._fallback_brokers()
-
-        cases, threads, legal_requests = self._build_cases_and_threads(
-            scan_id=scan_id,
-            seed=normalized_seed,
-            brokers=brokers,
-            jurisdiction=jurisdiction,
-        )
-
-        metrics = {
-            "brokers_scanned": 124,
-            "exposures_found": len(brokers) + len(pipeline["accounts"]) + len(pipeline["usernames"]) + 3,
-            "deletions_secured": sum(1 for case in cases if case["status"] == "resolved"),
-            "active_disputes": sum(1 for case in cases if case["status"] != "resolved"),
+        # Always initialize new scans in a neutral "in progress" state.
+        # The worker pipeline is responsible for discovering real accounts/targets/events.
+        identity = {
+            "name": pivot,
+            "real_name": None,
+            "location": "Unknown",
+            "seed": normalized_seed,
+        }
+        graph = {
+            "nodes": [{"id": "seed", "type": "seed", "label": normalized_seed, "x": 400, "y": 300}],
+            "edges": [],
         }
 
         activity_feed = [
             {
                 "id": new_id("evt"),
                 "type": "System",
-                "message": "Sleuth Agent accessing broker directories...",
-                "created_at": "2026-04-17T10:10:00Z",
-                "payload": {"stage": "osint"},
-            },
-            {
-                "id": new_id("evt"),
-                "type": "Scan",
-                "message": "Username pivot detected on GitHub.",
-                "created_at": "2026-04-17T10:11:00Z",
-                "payload": {"stage": "username_pivot"},
-            },
-            {
-                "id": new_id("evt"),
-                "type": "Legal",
-                "message": f"{jurisdiction}-compliant takedown requests prepared.",
-                "created_at": "2026-04-17T10:12:00Z",
-                "payload": {"stage": "legal_strategy"},
+                "message": "Scan initialized. Awaiting OSINT pipeline execution.",
+                "created_at": timestamp,
+                "payload": {"stage": "initialize_scan"},
             },
         ]
 
@@ -102,31 +74,35 @@ class Supervisor:
                 "normalized_seed": normalized_seed,
                 "seed_type": seed_type,
                 "jurisdiction": jurisdiction,
-                "status": "active",
-                "progress": 100,
-                "current_stage": "publish_realtime_updates",
+                "status": "initializing",
+                "progress": 5,
+                "current_stage": "queueing_osint_pipeline",
             },
-            "stages": [{"name": stage, "status": "completed"} for stage in build_default_graph()],
-            "identity": pipeline["identity"],
-            "accounts": pipeline["accounts"],
-            "usernames": pipeline["usernames"],
-            "graph": pipeline["graph"],
+            "stages": [{"name": stage, "status": "pending"} for stage in build_default_graph()],
+            "identity": identity,
+            "accounts": [],
+            "usernames": [],
+            "graph": graph,
             "events": activity_feed,
             "agent_runs": [
-                {"agent_name": "Sleuth Agent", "status": "active", "detail": "Expanding identity graph"},
-                {"agent_name": "Legal Agent", "status": "drafting", "detail": "Preparing deletion notices"},
-                {"agent_name": "Communications Agent", "status": "engaged", "detail": "Monitoring broker replies"},
+                {"agent_name": "Sleuth Agent", "status": "queued", "detail": "Waiting to start OSINT pipeline"},
+                {"agent_name": "Legal Agent", "status": "idle", "detail": "Awaiting discovered targets"},
+                {"agent_name": "Communications Agent", "status": "idle", "detail": "Awaiting legal dispatch"},
             ],
-            "targets": cases,
-            "threads": threads,
-            "legal_requests": legal_requests,
+            "targets": [],
+            "threads": {},
+            "legal_requests": [],
             "report": {
-                "summary": f"DataReaper mapped the exposure surface for {normalized_seed} and opened deletion cases across multiple brokers.",
-                "metrics": metrics,
+                "summary": f"Scan queued for {normalized_seed}. Results will populate as the worker progresses.",
+                "metrics": {
+                    "brokers_scanned": 0,
+                    "exposures_found": 0,
+                    "deletions_secured": 0,
+                    "active_disputes": 0,
+                },
                 "highlights": [
-                    "Seed expanded into a pivot graph of accounts, usernames, and target brokers.",
-                    "Jurisdiction-aware notices were generated automatically.",
-                    "Broker replies were classified into stalling, illegal pushback, and resolved states.",
+                    "Scan created and staged for asynchronous OSINT processing.",
+                    f"Environment: {settings.app_env}.",
                 ],
             },
         }

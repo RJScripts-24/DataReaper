@@ -4,14 +4,21 @@ from sqlalchemy import select
 
 from datareaper.brokers.discovery import discover_brokers, discover_brokers_async
 from datareaper.core.ids import new_id
+from datareaper.core.logging import get_logger
+from datareaper.db.models.activity_event import ActivityEvent
 from datareaper.db.models.broker_case import BrokerCase
 from datareaper.db.models.identity_profile import IdentityProfile
 from datareaper.db.models.scan_job import ScanJob
+from datareaper.db.repositories.scan_repo import is_terminal_scan_status
 from datareaper.db.session import SessionLocal
 from datareaper.realtime.publishers import publish
 
 
+logger = get_logger(__name__)
+
+
 async def discover_targets(ctx: dict, scan_id: str) -> dict:
+    logger.info("discover_targets_started", scan_id=scan_id)
     session = ctx.get("db_session")
     browser = ctx.get("browser")
     queue = ctx.get("queue")
@@ -26,7 +33,11 @@ async def discover_targets(ctx: dict, scan_id: str) -> dict:
 
     scan = await session.get(ScanJob, scan_id)
     if scan is None:
+        logger.warning("discover_targets_missing_scan", scan_id=scan_id)
         return {"scan_id": scan_id, "status": "missing_scan"}
+    if is_terminal_scan_status(scan.status):
+        logger.info("discover_targets_skipped_terminal", scan_id=scan_id, status=scan.status)
+        return {"scan_id": scan_id, "status": "skipped_terminal", "scan_status": scan.status}
 
     profile_result = await session.execute(
         select(IdentityProfile).where(IdentityProfile.scan_job_id == scan_id)
@@ -72,6 +83,16 @@ async def discover_targets(ctx: dict, scan_id: str) -> dict:
 
     scan.current_stage = "legal_dispatch"
     scan.progress = 80
+    scan.status = "running"
+    session.add(
+        ActivityEvent(
+            id=new_id("evt"),
+            scan_job_id=scan_id,
+            event_type="Scan",
+            message=f"Broker discovery stage completed. New brokers={created}.",
+            payload={"stage": "broker_discovery", "brokers_found": created},
+        )
+    )
     await session.commit()
 
     if queue is not None:
@@ -86,6 +107,7 @@ async def discover_targets(ctx: dict, scan_id: str) -> dict:
             "count": created,
         },
     )
+    logger.info("discover_targets_completed", scan_id=scan_id, brokers_found=created)
     return {"scan_id": scan_id, "status": "ok", "brokers_found": created}
 
 

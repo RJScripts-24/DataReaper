@@ -1,24 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { Activity, Shield, Trash2, Scale, Maximize2, X } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { toast } from "sonner";
 
 import { PressureFilter } from "../components/PressureFilter";
 import { PressureText } from "../components/PressureText";
-import {
-  dataReaperQueryKeys,
-  useActivityLogsQuery,
-  useAgentStatusesQuery,
-  useDashboardSummaryQuery,
-  usePivotChainQuery,
-  useRadarTargetsQuery,
-  useScanStatusQuery,
-} from "../lib/hooks";
+import { stopScan } from "../lib/api";
 import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { useRealtimeSubscription, type RealtimeConnectionStatus } from "../lib/wsClient";
 import { ReaperCursor } from "../components/ReaperCursor";
+import { useDashboard } from "../lib/useDashboard";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -227,18 +220,6 @@ function ConnectionBanner({ status }: { status: RealtimeConnectionStatus }) {
   );
 }
 
-function formatScanStatusLabel(status: string | undefined): string {
-  if (!status) {
-    return "Status unknown";
-  }
-
-  return status
-    .replace(/_/g, " ")
-    .split(" ")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function formatTimestamp(input: string | undefined): string {
   if (!input) {
     return "--";
@@ -254,92 +235,96 @@ function formatTimestamp(input: string | undefined): string {
 
 export default function CommandCenter() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { clearActiveScan } = useScanContext();
   const scanId = useRequireScan();
 
   const [isRadarExpanded, setIsRadarExpanded] = useState(false);
   const [isFeedExpanded, setIsFeedExpanded] = useState(false);
-
-  const scanQuery = useScanStatusQuery(scanId);
-  const summaryQuery = useDashboardSummaryQuery(scanId);
-  const radarQuery = useRadarTargetsQuery(scanId);
-  const activityQuery = useActivityLogsQuery(scanId);
-  const agentsQuery = useAgentStatusesQuery(scanId);
-  const pivotQuery = usePivotChainQuery(scanId);
-
-  const realtimeStatus = useRealtimeSubscription({
-    scanId,
-    enabled: Boolean(scanId),
-    channels: [
-      "dashboard.summary",
-      "dashboard.radar",
-      "dashboard.activity",
-      "dashboard.agents",
-      "scans.lifecycle",
-    ],
-    onEvent: (event) => {
-      if (!scanId || event.scanId !== scanId) {
-        return;
-      }
-
-      if (event.event.startsWith("dashboard.")) {
-        void queryClient.invalidateQueries({ queryKey: dataReaperQueryKeys.dashboardSummary(scanId) });
-        void queryClient.invalidateQueries({ queryKey: dataReaperQueryKeys.radarTargets(scanId) });
-        void queryClient.invalidateQueries({ queryKey: dataReaperQueryKeys.activityLogs(scanId) });
-        void queryClient.invalidateQueries({ queryKey: dataReaperQueryKeys.agentStatuses(scanId) });
-      }
-
-      if (event.event.startsWith("scans.lifecycle")) {
-        void queryClient.invalidateQueries({ queryKey: dataReaperQueryKeys.scan(scanId) });
-      }
-    },
-  });
+  const [isStoppingScan, setIsStoppingScan] = useState(false);
+  const [isStopped, setIsStopped] = useState(false);
+  const { state, connectionStatus } = useDashboard(scanId);
+  const realtimeStatus = connectionStatus;
 
   if (!scanId) {
     return null;
   }
 
-  const summary = summaryQuery.data;
-  const scan = scanQuery.data;
-  const radarTargets = radarQuery.data?.items ?? [];
-  const activityLogs = activityQuery.data?.items ?? [];
-  const agents = agentsQuery.data?.agents ?? [];
-  const pivot = pivotQuery.data;
+  const radarTargets = state.radarTargets;
+  const activityLogs = state.activityFeed;
+  const agents = state.agentStatuses;
 
-  const isLoading =
-    summaryQuery.isLoading ||
-    radarQuery.isLoading ||
-    activityQuery.isLoading ||
-    agentsQuery.isLoading ||
-    pivotQuery.isLoading;
+  useEffect(() => {
+    if (activityLogs.some((entry) => entry.type === "scan_stopped")) {
+      setIsStopped(true);
+    }
+  }, [activityLogs]);
 
-  const hasError =
-    summaryQuery.isError ||
-    radarQuery.isError ||
-    activityQuery.isError ||
-    agentsQuery.isError ||
-    pivotQuery.isError;
-
-  const stats = summary?.stats ?? {
-    brokersScanned: 0,
-    exposuresFound: 0,
-    deletionsSecured: 0,
-    activeDisputes: 0,
+  const stats = {
+    brokersScanned: state.brokerCount,
+    exposuresFound: state.exposureCount,
+    deletionsSecured: state.deletionCount,
+    activeDisputes: state.disputeCount,
   };
 
-  const trends = summary?.trends ?? {
-    brokersScanned: [0],
-    exposuresFound: [0],
-    deletionsSecured: [0],
-    activeDisputes: [0],
+  const trends = {
+    brokersScanned: [Math.max(0, state.brokerCount - 1), state.brokerCount],
+    exposuresFound: [Math.max(0, state.exposureCount - 1), state.exposureCount],
+    deletionsSecured: [Math.max(0, state.deletionCount - 1), state.deletionCount],
+    activeDisputes: [Math.max(0, state.disputeCount - 1), state.disputeCount],
   };
+
+  const threatTotal = Math.max(
+    1,
+    state.threatBreakdown.email + state.threatBreakdown.phone + state.threatBreakdown.location
+  );
 
   const threatBreakdown = {
-    email: summary?.threatBreakdown.find((item) => item.type === "email"),
-    phone: summary?.threatBreakdown.find((item) => item.type === "phone"),
-    location: summary?.threatBreakdown.find((item) => item.type === "location"),
+    email: {
+      count: state.threatBreakdown.email,
+      percentOfTotal: (state.threatBreakdown.email / threatTotal) * 100,
+    },
+    phone: {
+      count: state.threatBreakdown.phone,
+      percentOfTotal: (state.threatBreakdown.phone / threatTotal) * 100,
+    },
+    location: {
+      count: state.threatBreakdown.location,
+      percentOfTotal: (state.threatBreakdown.location / threatTotal) * 100,
+    },
   };
+
+  const pivotColumns = [
+    { label: "Emails", values: state.pivotGraph.emails },
+    { label: "Usernames", values: state.pivotGraph.usernames },
+    { label: "Platforms", values: state.pivotGraph.platforms },
+    { label: "Brokers", values: state.pivotGraph.brokers },
+  ];
+
+  const lastUpdatedAt = activityLogs[0]?.createdAt;
+
+  const statusLabel =
+    isStopped
+      ? "STOPPED"
+      :
+    connectionStatus === "connected"
+      ? "LIVE"
+      : connectionStatus === "reconnecting" || connectionStatus === "connecting"
+        ? "RECONNECTING..."
+        : connectionStatus === "offline"
+          ? "OFFLINE"
+          : "STANDBY";
+
+  const statusColor =
+    isStopped
+      ? COLORS.red
+      :
+    connectionStatus === "connected"
+      ? COLORS.green
+      : connectionStatus === "reconnecting" || connectionStatus === "connecting"
+        ? COLORS.orange
+        : connectionStatus === "offline"
+          ? COLORS.red
+          : COLORS.textSec;
 
   const threatCounts = radarTargets.reduce(
     (acc, target) => {
@@ -352,6 +337,19 @@ export default function CommandCenter() {
   const radarSvg = (
     <div className="relative w-full max-w-[460px] aspect-square mx-auto">
       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 400" style={{ filter: "url(#pencil-sketch)" }}>
+        <defs>
+          <radialGradient id="radar-glow" cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stopColor={COLORS.green} stopOpacity="0.24" />
+            <stop offset="100%" stopColor={COLORS.green} stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="radar-sweep" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={COLORS.green} stopOpacity="0" />
+            <stop offset="100%" stopColor={COLORS.green} stopOpacity="0.45" />
+          </linearGradient>
+        </defs>
+
+        <circle cx="200" cy="200" r="180" fill="url(#radar-glow)" opacity="0.45" />
+
         {[80, 120, 160, 200].map((radius, index) => (
           <circle
             key={radius}
@@ -365,6 +363,25 @@ export default function CommandCenter() {
             opacity={index === 3 ? 0.15 : 0.08}
           />
         ))}
+
+        <motion.g
+          style={{ originX: "200px", originY: "200px" }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 5, ease: "linear", repeat: Infinity }}
+        >
+          <line
+            x1="200"
+            y1="200"
+            x2="200"
+            y2="24"
+            stroke="url(#radar-sweep)"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          <circle cx="200" cy="24" r="4" fill={COLORS.green} opacity="0.5" />
+        </motion.g>
+
+        <circle cx="200" cy="200" r="5" fill={COLORS.green} opacity="0.5" />
 
         {radarTargets.map((dot) => {
           const radians = (dot.angle * Math.PI) / 180;
@@ -468,14 +485,46 @@ export default function CommandCenter() {
             <div className="hidden lg:flex items-center gap-2">
               <motion.div
                 className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: COLORS.green, boxShadow: `0 0 8px ${COLORS.green}55` }}
+                style={{ backgroundColor: statusColor, boxShadow: `0 0 8px ${statusColor}55` }}
                 animate={{ opacity: [1, 0.5, 1], scale: [1, 1.2, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               />
-              <PressureText as="span" className="text-lg" style={{ color: COLORS.green, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>
-                {formatScanStatusLabel(scan?.status)}
+              <PressureText
+                as="span"
+                className="text-lg px-2 py-0.5 rounded-full border"
+                style={{
+                  color: statusColor,
+                  borderColor: `${statusColor}66`,
+                  backgroundColor: `${statusColor}11`,
+                  fontWeight: 700,
+                  fontFamily: "'Patrick Hand', cursive",
+                }}
+              >
+                {statusLabel}
               </PressureText>
             </div>
+            <button
+              type="button"
+              className="hand-drawn-button px-3 py-2"
+              disabled={isStoppingScan || isStopped}
+              onClick={async () => {
+                if (!scanId || isStoppingScan || isStopped) {
+                  return;
+                }
+                try {
+                  setIsStoppingScan(true);
+                  await stopScan(scanId, "manual_stop_button");
+                  setIsStopped(true);
+                  toast.success("Scan stopped. Live crawling halted.");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Failed to stop scan.");
+                } finally {
+                  setIsStoppingScan(false);
+                }
+              }}
+            >
+              {isStopped ? "Scan Stopped" : isStoppingScan ? "Stopping..." : "Stop Scan"}
+            </button>
             <button
               type="button"
               className="hand-drawn-button px-3 py-2"
@@ -502,7 +551,7 @@ export default function CommandCenter() {
             className="text-xl opacity-80"
             style={{ fontFamily: "'Patrick Hand', cursive", letterSpacing: "0.02em" }}
           >
-            Scan ID: {scanId} · Last update: {formatTimestamp(scan?.updatedAt)}
+            Scan ID: {scanId} · Last update: {formatTimestamp(lastUpdatedAt)}
           </PressureText>
         </div>
 
@@ -535,7 +584,7 @@ export default function CommandCenter() {
           <StatCard
             icon={<Activity className="w-5 h-5" />}
             title="Brokers Scanned"
-            value={`${stats.brokersScanned}${isLoading ? "" : "+"}`}
+            value={`${stats.brokersScanned}+`}
             trend={trendLabel(trends.brokersScanned).text}
             trendUp={trendLabel(trends.brokersScanned).up}
             series={trends.brokersScanned}
@@ -683,15 +732,15 @@ export default function CommandCenter() {
                 Exposed seed to broker graph, generated from live reconnaissance.
               </p>
 
-              {!pivot && (
+              {pivotColumns.every((column) => column.values.length === 0) && (
                 <p style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
                   Pivot chain is still building.
                 </p>
               )}
 
-              {pivot && (
+              {!pivotColumns.every((column) => column.values.length === 0) && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  {pivot.columns.map((column) => (
+                  {pivotColumns.map((column) => (
                     <div key={column.label} className="p-3" style={{ border: "1px dashed rgba(0,0,0,0.12)", borderRadius: 12 }}>
                       <div className="text-base mb-2" style={{ fontFamily: "'Caveat', cursive", color: COLORS.text }}>
                         {column.label}

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from datareaper.core.exceptions import ResourceNotFoundError
 from datareaper.core.ids import new_id
+from datareaper.core.logging import get_logger
 from datareaper.db.in_memory import memory_store
 from datareaper.db.models.activity_event import ActivityEvent
 from datareaper.db.models.agent_run import AgentRun
@@ -22,8 +24,10 @@ from datareaper.db.models.report_snapshot import ReportSnapshot
 from datareaper.db.models.scan_job import ScanJob
 from datareaper.db.models.scan_stage import ScanStage
 from datareaper.db.models.seed import Seed
+from datareaper.db.session import SessionLocal
 
-TERMINAL_SCAN_STATUSES = {"completed", "resolved", "failed", "cancelled", "active"}
+TERMINAL_SCAN_STATUSES = {"completed", "resolved", "failed", "cancelled"}
+logger = get_logger(__name__)
 
 
 def _is_active_scan_status(status: str | None) -> bool:
@@ -31,6 +35,30 @@ def _is_active_scan_status(status: str | None) -> bool:
     if not normalized:
         return True
     return normalized not in TERMINAL_SCAN_STATUSES
+
+
+def is_terminal_scan_status(status: str | None) -> bool:
+    normalized = str(status or "").strip().lower()
+    if not normalized:
+        return False
+    return normalized in TERMINAL_SCAN_STATUSES
+
+
+def _is_transient_db_error(exc: Exception) -> bool:
+    if isinstance(exc, (InterfaceError, OperationalError)):
+        return True
+    if isinstance(exc, DBAPIError) and exc.connection_invalidated:
+        return True
+
+    message = str(exc).lower()
+    transient_markers = (
+        "connection is closed",
+        "connection was closed in the middle",
+        "connectiondoesnotexisterror",
+        "server closed the connection",
+        "connection reset",
+    )
+    return any(marker in message for marker in transient_markers)
 
 
 class ScanRepository:
@@ -256,6 +284,55 @@ class ScanRepository:
             if _is_active_scan_status(status)
         ]
 
+    async def stop_scan(self, session: AsyncSession | None, scan_id: str, reason: str | None = None) -> dict:
+        message = "Scan stopped by user."
+        if reason:
+            message = f"Scan stopped by user: {reason}"
+
+        if session is None:
+            updated = memory_store.update_scan_status(
+                scan_id,
+                status="cancelled",
+                current_stage="stopped_by_user",
+            )
+            if updated is None:
+                raise ResourceNotFoundError(f"Scan {scan_id} not found")
+            memory_store.append_event(
+                scan_id,
+                "System",
+                message,
+                {"stage": "stopped", "reason": reason or "manual"},
+            )
+            return {
+                "scan_id": scan_id,
+                "status": "cancelled",
+                "current_stage": "stopped_by_user",
+                "progress": int((updated.get("scan") or {}).get("progress", 0)),
+            }
+
+        scan = await session.get(ScanJob, scan_id)
+        if scan is None:
+            raise ResourceNotFoundError(f"Scan {scan_id} not found")
+
+        scan.status = "cancelled"
+        scan.current_stage = "stopped_by_user"
+        session.add(
+            ActivityEvent(
+                id=new_id("evt"),
+                scan_job_id=scan_id,
+                event_type="System",
+                message=message,
+                payload={"stage": "stopped", "reason": reason or "manual"},
+            )
+        )
+        await session.commit()
+        return {
+            "scan_id": scan_id,
+            "status": scan.status,
+            "current_stage": scan.current_stage,
+            "progress": int(scan.progress or 0),
+        }
+
     async def load_scan_bundle(self, session: AsyncSession | None, scan_id: str) -> dict:
         if session is None:
             bundle = memory_store.get_scan_bundle(scan_id)
@@ -263,6 +340,29 @@ class ScanRepository:
                 raise ResourceNotFoundError(f"Scan {scan_id} not found")
             return bundle
 
+        try:
+            return await self._load_scan_bundle_from_db(session, scan_id)
+        except Exception as exc:
+            if not _is_transient_db_error(exc):
+                raise
+
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+
+            if SessionLocal is None:
+                raise
+
+            logger.warning(
+                "scan_bundle_transient_db_error_retrying_with_fresh_session",
+                scan_id=scan_id,
+                error=str(exc),
+            )
+            async with SessionLocal() as fresh_session:
+                return await self._load_scan_bundle_from_db(fresh_session, scan_id)
+
+    async def _load_scan_bundle_from_db(self, session: AsyncSession, scan_id: str) -> dict:
         scan_job = await session.get(ScanJob, scan_id)
         if scan_job is None:
             raise ResourceNotFoundError(f"Scan {scan_id} not found")

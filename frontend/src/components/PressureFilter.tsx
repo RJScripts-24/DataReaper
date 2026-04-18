@@ -11,7 +11,7 @@ export const PressureFilter = React.memo(() => {
           <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.3 0" in="noise" result="coloredNoise" />
           <feDisplacementMap in="blur1" in2="coloredNoise" scale="3" xChannelSelector="R" yChannelSelector="G" result="roughBlur" />
           
-          <feDiffuseLighting in="roughBlur" surfaceScale="2.5" diffuseConstant="1.5" lighting-color="#ffffff" result="diffOut">
+          <feDiffuseLighting in="roughBlur" surfaceScale="2.5" diffuseConstant="1.5" lightingColor="#ffffff" result="diffOut">
              <feDistantLight azimuth="225" elevation="40" />
           </feDiffuseLighting>
           
@@ -29,7 +29,7 @@ export const PressureFilter = React.memo(() => {
           <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.15 0" in="noise" result="coloredNoise" />
           <feDisplacementMap in="blur1" in2="coloredNoise" scale="1.5" xChannelSelector="R" yChannelSelector="G" result="roughBlur" />
           
-          <feDiffuseLighting in="roughBlur" surfaceScale="1.5" diffuseConstant="1.2" lighting-color="#ffffff" result="diffOut">
+          <feDiffuseLighting in="roughBlur" surfaceScale="1.5" diffuseConstant="1.2" lightingColor="#ffffff" result="diffOut">
              <feDistantLight azimuth="225" elevation="40" />
           </feDiffuseLighting>
           
@@ -47,7 +47,7 @@ export const PressureFilter = React.memo(() => {
           <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.2 0" in="noise" result="coloredNoise" />
           <feDisplacementMap in="blur1" in2="coloredNoise" scale="2" xChannelSelector="R" yChannelSelector="G" result="roughBlur" />
           
-          <feDiffuseLighting in="roughBlur" surfaceScale="2" diffuseConstant="1.3" lighting-color="#ffffff" result="diffOut">
+          <feDiffuseLighting in="roughBlur" surfaceScale="2" diffuseConstant="1.3" lightingColor="#ffffff" result="diffOut">
              <feDistantLight azimuth="225" elevation="40" />
           </feDiffuseLighting>
           

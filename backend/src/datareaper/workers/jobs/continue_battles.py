@@ -1,7 +1,9 @@
 ﻿from __future__ import annotations
 
 from datareaper.comms.sync import sync_inbox_for_scan
+from datareaper.db.models.scan_job import ScanJob
 from datareaper.db.repositories.battle_repo import BattleRepository
+from datareaper.db.repositories.scan_repo import is_terminal_scan_status
 from datareaper.db.session import SessionLocal
 
 
@@ -16,6 +18,12 @@ async def continue_battles(ctx: dict, scan_id: str) -> dict:
 
     if session is None:
         return {"scan_id": scan_id, "status": "skipped", "reason": "no_db_session"}
+
+    scan = await session.get(ScanJob, scan_id)
+    if scan is None:
+        return {"scan_id": scan_id, "status": "missing_scan"}
+    if is_terminal_scan_status(scan.status):
+        return {"scan_id": scan_id, "status": "skipped_terminal", "scan_status": scan.status}
 
     repo = ctx.get("battle_repo") or BattleRepository()
     updates = await sync_inbox_for_scan(scan_id=scan_id, battle_repo=repo, llm=llm)

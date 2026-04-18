@@ -17,6 +17,10 @@ def get_engine():
     # Prevent cross-event-loop connection reuse in tests (TestClient starts/stops loops frequently).
     if settings.app_env == "test":
         engine_kwargs["poolclass"] = NullPool
+    else:
+        # Keep long-running worker/API sessions resilient to server-side connection closes.
+        engine_kwargs["pool_pre_ping"] = True
+        engine_kwargs["pool_recycle"] = 300
 
     if settings.is_supabase_db:
         ssl_context = ssl.create_default_context()

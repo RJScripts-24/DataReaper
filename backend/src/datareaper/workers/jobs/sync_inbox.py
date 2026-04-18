@@ -4,10 +4,26 @@ from datareaper.comms.attachment_handler import extract_form_url
 from datareaper.comms.gmail_client import get_gmail_client
 from datareaper.comms.reply_generator import build_reply, build_reply_with_llm
 from datareaper.comms.sync import sync_inbox_for_scan
+from datareaper.db.models.scan_job import ScanJob
+from datareaper.db.repositories.scan_repo import is_terminal_scan_status
+from datareaper.db.session import SessionLocal
 from datareaper.legal.form_mapper import build_field_map
 
 
+async def _scan_is_terminal(scan_id: str) -> bool:
+    if SessionLocal is None:
+        return False
+    async with SessionLocal() as session:
+        scan = await session.get(ScanJob, scan_id)
+        if scan is None:
+            return True
+        return is_terminal_scan_status(scan.status)
+
+
 async def sync_inbox(ctx: dict, scan_id: str) -> dict:
+    if await _scan_is_terminal(scan_id):
+        return {"scan_id": scan_id, "status": "skipped_terminal"}
+
     llm = ctx.get("llm")
     battle_repo = ctx.get("battle_repo")
     queue = ctx.get("queue")

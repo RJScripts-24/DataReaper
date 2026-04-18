@@ -4,9 +4,11 @@ from typing import Any
 from urllib.parse import urlparse
 
 try:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
     from playwright.async_api import async_playwright
 except ModuleNotFoundError:  # pragma: no cover - depends on local optional deps
     async_playwright = None
+    PlaywrightTimeoutError = TimeoutError
 
 from datareaper.core.config import get_settings
 from datareaper.core.logging import get_logger
@@ -125,13 +127,25 @@ class PlaywrightClient:
                 None,
             )
 
-            # Always use domcontentloaded; networkidle can hang on SPAs with heartbeat polling.
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            # Keep navigation timeout lower so blocked social pages do not stall the crawl loop.
+            nav_timeout_ms = 12000
+            response = None
+            timed_out = False
+            try:
+                # Always use domcontentloaded; networkidle can hang on SPAs with heartbeat polling.
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=nav_timeout_ms)
+            except PlaywrightTimeoutError:
+                timed_out = True
+                logger.warning(
+                    "playwright_navigation_timeout",
+                    url=url,
+                    timeout_ms=nav_timeout_ms,
+                )
 
             effective_selector = wait_selector or matched_selector
             if effective_selector:
                 try:
-                    await page.wait_for_selector(effective_selector, timeout=8000, state="attached")
+                    await page.wait_for_selector(effective_selector, timeout=6000, state="attached")
                 except Exception:
                     # Best-effort only; we still return what we have.
                     pass
@@ -142,7 +156,12 @@ class PlaywrightClient:
                 await page.wait_for_timeout(1200)
                 html = await page.content()
             status = response.status if response is not None else 0
-            return {"url": url, "html": html, "status": status}
+            return {
+                "url": url,
+                "html": html,
+                "status": status,
+                "timed_out": timed_out,
+            }
         except Exception as exc:  # pragma: no cover - browser/network exceptions
             logger.warning("playwright_fetch_failed", url=url, error=str(exc))
             return {"url": url, "html": "", "status": 0, "error": str(exc)}

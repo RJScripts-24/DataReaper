@@ -1,66 +1,62 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
 import { PressureText } from "../components/PressureText";
 import { PressureInput } from "../components/PressureInput";
 import { PressureFilter } from "../components/PressureFilter";
 import { ApiClientError } from "../lib/apiClient";
-import { useCreateScanMutation } from "../lib/hooks";
+import apiClient from "../lib/apiClient";
 import { useScanContext } from "../lib/scanContext";
 import { ReaperCursor } from "../components/ReaperCursor";
-
-function detectSeedType(value: string): "email" | "phone" | null {
-  const normalized = value.trim();
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const phonePattern = /^\+?[0-9()\-\s]{7,20}$/;
-
-  if (emailPattern.test(normalized)) {
-    return "email";
-  }
-  if (phonePattern.test(normalized)) {
-    return "phone";
-  }
-  return null;
-}
 
 export default function Onboarding() {
   const navigate = useNavigate();
   const { setActiveScan } = useScanContext();
-  const createScanMutation = useCreateScanMutation();
   const [input, setInput] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [bootLogLines, setBootLogLines] = useState<string[]>([]);
+
+  const playBootLog = async (lines: string[]) => {
+    for (const line of lines) {
+      setBootLogLines((previous) => [...previous, line]);
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 250);
+      });
+    }
+  };
 
   const handleInitialize = async () => {
     const normalized = input.trim();
-    if (!normalized || createScanMutation.isPending) {
-      return;
-    }
-
-    const detectedSeedType = detectSeedType(normalized);
-    if (!detectedSeedType) {
-      setInputError("Enter a valid email address or phone number.");
+    if (!normalized || isLaunching) {
       return;
     }
 
     setInputError(null);
+    setBootLogLines([]);
+    setIsLaunching(true);
 
     try {
-      const response = await createScanMutation.mutateAsync({
-        seed: {
-          type: detectedSeedType,
-          value: normalized,
-        },
-        jurisdictionHint: "AUTO",
+      const response = await apiClient.post<{
+        scan_id: string;
+        boot_log: string[];
+      }>("/api/onboarding/initialize", {
+        seeds: [normalized],
+        seed_type: "auto",
+        jurisdiction: "DPDP",
+        consent_confirmed: true,
       });
 
-      setActiveScan(response.scanId);
-      toast.success("Scan launched. Command Center is now live.");
-      navigate(response.routeHints.commandCenter);
+      const { scan_id, boot_log } = response.data;
+      setActiveScan(scan_id);
+
+      const lines = Array.isArray(boot_log) && boot_log.length > 0 ? boot_log : ["Booting Sleuth Agent..."];
+      await playBootLog(lines);
+      navigate("/command-center");
     } catch (error) {
       const message = error instanceof ApiClientError ? error.message : "Failed to launch scan. Please retry.";
       setInputError(message);
-      toast.error(message);
+      setIsLaunching(false);
     }
   };
 
@@ -155,6 +151,7 @@ export default function Onboarding() {
                   <PressureInput
                     type="text"
                     value={input}
+                    disabled={isLaunching}
                     onChange={(e: any) => {
                       setInput(e.target.value);
                       if (inputError) {
@@ -181,6 +178,29 @@ export default function Onboarding() {
                   />
                 </div>
 
+                {bootLogLines.length > 0 && (
+                  <div className="pencil-fill-dark rounded-[14px] border border-[#3b3b4f] px-4 py-4 mb-6 min-h-[120px]">
+                    <div className="space-y-1">
+                      {bootLogLines.map((line, index) => {
+                        const isCurrentLine = index === bootLogLines.length - 1;
+                        return (
+                          <motion.p
+                            key={`${line}-${index}`}
+                            initial={{ opacity: 0, y: 3 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="paper-text text-xl"
+                            style={{ fontFamily: "'Patrick Hand', cursive", color: "#d7dcf3" }}
+                          >
+                            {line}
+                            {isCurrentLine && <span className="terminal-cursor ml-1">█</span>}
+                          </motion.p>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {inputError && (
                   <div
                     data-reaper-expression="sad"
@@ -199,16 +219,17 @@ export default function Onboarding() {
 
                 <motion.button
                   onClick={handleInitialize}
-                  disabled={!input.trim() || createScanMutation.isPending}
-                  whileHover={{ scale: input.trim() && !createScanMutation.isPending ? 1.02 : 1, rotate: -0.5 }}
-                  whileTap={{ scale: input.trim() && !createScanMutation.isPending ? 0.98 : 1 }}
+                  disabled={!input.trim() || isLaunching}
+                  whileHover={{ scale: input.trim() && !isLaunching ? 1.02 : 1, rotate: -0.5 }}
+                  whileTap={{ scale: input.trim() && !isLaunching ? 0.98 : 1 }}
                   className="w-full py-5 hand-drawn-button text-2xl"
                   style={{ opacity: !input.trim() || createScanMutation.isPending ? 0.5 : 1 }}
                   data-reaper-expression="happy"
                   data-reaper-phrases="Initiate the hunt.||Release the Sleuth Agent!||Let's burn their data logs.||No mercy for brokers."
+                  style={{ opacity: !input.trim() || isLaunching ? 0.5 : 1 }}
                 >
                   <PressureText className="paper-text">
-                    {createScanMutation.isPending ? "Launching Sleuth Agent..." : "Launch Sleuth Agent"}
+                    {isLaunching ? "Initializing..." : "Launch Sleuth Agent"}
                   </PressureText>
                 </motion.button>
               </div>
@@ -297,6 +318,18 @@ export default function Onboarding() {
             #252535 4px
           ) !important;
           border-color: #3b3b4f !important;
+        }
+
+        .terminal-cursor {
+          display: inline-block;
+          animation: terminal-blink 1s steps(2, start) infinite;
+          color: #d7dcf3;
+        }
+
+        @keyframes terminal-blink {
+          to {
+            visibility: hidden;
+          }
         }
       `}</style>
       <ReaperCursor />

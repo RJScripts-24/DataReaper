@@ -11,8 +11,16 @@ class DashboardRepository:
 
     async def get_dashboard(self, session: AsyncSession | None, scan_id: str) -> dict:
         bundle = await self.scan_repo.load_scan_bundle(session, scan_id)
-        metrics = bundle["report"]["metrics"]
         targets = bundle["targets"]
+        events = bundle.get("events", [])
+
+        brokers_scanned = len(targets)
+        deletions_secured = sum(1 for target in targets if str(target.get("status", "")).lower() == "resolved")
+        active_disputes = max(brokers_scanned - deletions_secured, 0)
+        exposures_from_events = sum(
+            1 for event in events if str(event.get("type", "")).lower() == "exposure_found"
+        )
+        exposures_found = max(brokers_scanned, exposures_from_events)
 
         threat_breakdown = {
             "emails_exposed": sum("Email" in target["dataTypes"] for target in targets),
@@ -24,10 +32,10 @@ class DashboardRepository:
         return {
             "scan_id": scan_id,
             "stats": [
-                {"title": "Brokers Scanned", "value": metrics["brokers_scanned"], "delta": 0, "label": "Active reconnaissance"},
-                {"title": "Exposures Found", "value": metrics["exposures_found"], "delta": 0, "label": "Active threats detected"},
-                {"title": "Deletions Secured", "value": metrics["deletions_secured"], "delta": 0, "label": "Successfully removed"},
-                {"title": "Active Legal Disputes", "value": metrics["active_disputes"], "delta": 0, "label": "Awaiting response"},
+                {"title": "Brokers Scanned", "value": brokers_scanned, "delta": 0, "label": "Active reconnaissance"},
+                {"title": "Exposures Found", "value": exposures_found, "delta": 0, "label": "Active threats detected"},
+                {"title": "Deletions Secured", "value": deletions_secured, "delta": 0, "label": "Successfully removed"},
+                {"title": "Active Legal Disputes", "value": active_disputes, "delta": 0, "label": "Awaiting response"},
             ],
             "threat_breakdown": threat_breakdown,
             "radar_targets": [
