@@ -1633,13 +1633,23 @@ export default function IdentityGraph() {
   const scanId = useRequireScan();
   const graphViewportRef = useRef<HTMLDivElement | null>(null);
   const transformRef = useRef<GraphTransform>({ x: 0, y: 0, scale: 1 });
-  const panStateRef = useRef<{ pointerId: number | null; startX: number; startY: number; originX: number; originY: number }>({
+  const panStateRef = useRef<{
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+  }>({
     pointerId: null,
     startX: 0,
     startY: 0,
     originX: 0,
     originY: 0,
+    moved: false,
   });
+  const panFrameRef = useRef<number | null>(null);
+  const pendingPanTransformRef = useRef<GraphTransform | null>(null);
 
   const [showPlatforms, setShowPlatforms] = useState(true);
   const [showIdentity, setShowIdentity] = useState(true);
@@ -1696,6 +1706,14 @@ export default function IdentityGraph() {
   useEffect(() => {
     transformRef.current = graphTransform;
   }, [graphTransform]);
+
+  useEffect(() => {
+    return () => {
+      if (panFrameRef.current != null) {
+        window.cancelAnimationFrame(panFrameRef.current);
+      }
+    };
+  }, []);
 
   const realtimeStatus = useRealtimeSubscription({
     scanId,
@@ -1798,11 +1816,16 @@ export default function IdentityGraph() {
   };
 
   const handleCanvasPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
     const target = event.target as HTMLElement;
     if (target.closest("[data-graph-node='true']") || target.closest("[data-graph-control='true']")) {
       return;
     }
 
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     panStateRef.current = {
       pointerId: event.pointerId,
@@ -1810,6 +1833,7 @@ export default function IdentityGraph() {
       startY: event.clientY,
       originX: transformRef.current.x,
       originY: transformRef.current.y,
+      moved: false,
     };
     setIsPanning(true);
   };
@@ -1821,18 +1845,52 @@ export default function IdentityGraph() {
 
     const deltaX = event.clientX - panStateRef.current.startX;
     const deltaY = event.clientY - panStateRef.current.startY;
-    setGraphTransform((current) => ({
-      ...current,
+    if (!panStateRef.current.moved && Math.hypot(deltaX, deltaY) > 3) {
+      panStateRef.current.moved = true;
+    }
+
+    const nextTransform = {
+      ...transformRef.current,
       x: panStateRef.current.originX + deltaX,
       y: panStateRef.current.originY + deltaY,
-    }));
+    };
+    pendingPanTransformRef.current = nextTransform;
+
+    if (panFrameRef.current == null) {
+      panFrameRef.current = window.requestAnimationFrame(() => {
+        panFrameRef.current = null;
+        const pendingTransform = pendingPanTransformRef.current;
+        if (!pendingTransform) {
+          return;
+        }
+        pendingPanTransformRef.current = null;
+        setGraphTransform(pendingTransform);
+      });
+    }
   };
 
   const stopPanning = (event?: ReactPointerEvent<HTMLDivElement>) => {
-    if (event && panStateRef.current.pointerId === event.pointerId) {
+    if (event && panStateRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+
+    if (panFrameRef.current != null) {
+      window.cancelAnimationFrame(panFrameRef.current);
+      panFrameRef.current = null;
+    }
+
+    const pendingTransform = pendingPanTransformRef.current;
+    if (pendingTransform) {
+      pendingPanTransformRef.current = null;
+      setGraphTransform(pendingTransform);
+    }
+
     panStateRef.current.pointerId = null;
+    panStateRef.current.moved = false;
     setIsPanning(false);
   };
 
@@ -1969,9 +2027,16 @@ export default function IdentityGraph() {
           onPointerMove={handleCanvasPointerMove}
           onPointerUp={stopPanning}
           onPointerCancel={stopPanning}
+          onLostPointerCapture={stopPanning}
           data-reaper-expression="thinking"
           data-reaper-phrases="The web is expanding. Every node is a trace.||I'm weaving the trap. There's no escape from the graph.||Look at all these connections. They thought they were private!||Data relationships. My favorite kind of spiderweb."
-          style={{ backgroundColor: COLORS.paper, touchAction: "none", cursor: isPanning ? "grabbing" : "grab" }}
+          style={{
+            backgroundColor: COLORS.paper,
+            touchAction: "none",
+            cursor: isPanning ? "grabbing" : "grab",
+            userSelect: "none",
+            WebkitUserSelect: "none",
+          }}
         >
           <div
             className="absolute inset-0 opacity-15"
@@ -2024,6 +2089,7 @@ export default function IdentityGraph() {
               left: 0,
               top: 0,
               transform: `translate(${baseOffsetX + graphTransform.x}px, ${baseOffsetY + graphTransform.y}px) scale(${graphTransform.scale})`,
+              willChange: "transform",
             }}
           >
             <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ filter: "url(#pencil-sketch)" }}>
