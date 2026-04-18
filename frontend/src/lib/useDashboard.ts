@@ -99,6 +99,10 @@ type PivotChainResponse = {
   columns?: Array<{ label?: string; values?: string[] }>;
 };
 
+type ScanStatusResponse = {
+  status?: string;
+};
+
 export type RadarDot = {
   id: string;
   angle: number;
@@ -168,6 +172,81 @@ const EMPTY_STATE: LiveDashboardState = {
   },
   isLive: false,
 };
+
+const ACTIVE_SCAN_STATUSES = new Set(["queued", "discovering", "identifying", "engaging", "stabilizing"]);
+
+function isActiveScanStatus(status: string | undefined): boolean {
+  return ACTIVE_SCAN_STATUSES.has(String(status || "").trim().toLowerCase());
+}
+
+function brokerDiscoveryKey(value: { broker: string }): string {
+  return String(value.broker || "").trim().toLowerCase();
+}
+
+const DASHBOARD_CACHE_KEY_PREFIX = "datareaper.dashboard.state.v1";
+
+function dashboardCacheKey(scanId: string): string {
+  return `${DASHBOARD_CACHE_KEY_PREFIX}:${scanId}`;
+}
+
+function loadCachedDashboardState(scanId: string): LiveDashboardState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(dashboardCacheKey(scanId));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as LiveDashboardState;
+    if (typeof parsed !== "object" || parsed === null) {
+      return null;
+    }
+
+    return {
+      ...EMPTY_STATE,
+      ...parsed,
+      threatBreakdown: {
+        ...EMPTY_STATE.threatBreakdown,
+        ...(parsed.threatBreakdown || {}),
+      },
+      pivotGraph: {
+        ...EMPTY_STATE.pivotGraph,
+        ...(parsed.pivotGraph || {}),
+      },
+      isLive: false,
+    };
+  } catch (error) {
+    dashboardWarn("failed to load cached dashboard state", {
+      scanId,
+      ...toErrorContext(error),
+    });
+    return null;
+  }
+}
+
+function saveCachedDashboardState(scanId: string, state: LiveDashboardState): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      dashboardCacheKey(scanId),
+      JSON.stringify({
+        ...state,
+        isLive: false,
+      })
+    );
+  } catch (error) {
+    dashboardWarn("failed to save cached dashboard state", {
+      scanId,
+      ...toErrorContext(error),
+    });
+  }
+}
 
 function toNumber(value: unknown): number {
   const parsed = Number(value);
@@ -609,7 +688,11 @@ function parseSleuthEvent(raw: { event: string; payload: Record<string, unknown>
             : undefined,
           count: typeof payload.count === "number" ? payload.count : undefined,
           emails: Array.isArray(payload.emails) ? payload.emails.map((item) => String(item)) : undefined,
+          broker_names: Array.isArray(payload.broker_names)
+            ? payload.broker_names.map((item) => String(item))
+            : undefined,
           broker_name: typeof payload.broker_name === "string" ? payload.broker_name : undefined,
+          summary: typeof payload.summary === "boolean" ? payload.summary : undefined,
           angle: typeof payload.angle === "number" ? payload.angle : undefined,
           distance: typeof payload.distance === "number" ? payload.distance : undefined,
         },
@@ -695,8 +778,36 @@ export function useDashboard(scanId: string | null): {
   hasError: boolean;
   refetch: () => Promise<void>;
 } {
-  const [state, setState] = useState<LiveDashboardState>(EMPTY_STATE);
+  const [state, setState] = useState<LiveDashboardState>(() => {
+    if (!scanId) {
+      return EMPTY_STATE;
+    }
+    return loadCachedDashboardState(scanId) ?? EMPTY_STATE;
+  });
   const [hasError, setHasError] = useState(false);
+  const [pendingBrokerTargets, setPendingBrokerTargets] = useState<RadarDot[]>([]);
+
+  const enqueueBrokerTargets = useCallback((targets: RadarDot[]) => {
+    if (targets.length === 0) {
+      return;
+    }
+
+    setPendingBrokerTargets((previous) => {
+      const seen = new Set(previous.map((item) => brokerDiscoveryKey(item)));
+      const nextQueue = [...previous];
+
+      for (const target of targets) {
+        const key = brokerDiscoveryKey(target);
+        if (!key || seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        nextQueue.push(target);
+      }
+
+      return nextQueue;
+    });
+  }, []);
 
   const realtimeChannels = useMemo<RealtimeChannel[]>(
     () => ["dashboard.summary", "dashboard.radar", "dashboard.activity", "dashboard.agents", "scans.lifecycle"],
@@ -765,28 +876,45 @@ export function useDashboard(scanId: string | null): {
             }
 
             if (sleuthEvent.payload.stage === "broker_discovery") {
-              const brokerName = sleuthEvent.payload.broker_name ?? "Discovered Broker";
-              const angle = toNumber(sleuthEvent.payload.angle ?? 0);
-              const distance = normalizeDistance(toNumber(sleuthEvent.payload.distance ?? 0.6));
-              const radarTarget: RadarDot = {
-                id: `broker-discovery-${event.occurredAt}-${brokerName}`,
-                angle,
-                distance,
-                broker: brokerName,
-                status: "active",
-                type: "email",
-                color: colorForType("email"),
-              };
+              const stageBrokerNamesRaw = uniqueStrings(
+                sleuthEvent.payload.broker_names ??
+                  (sleuthEvent.payload.broker_name ? [sleuthEvent.payload.broker_name] : [])
+              );
+              const isSummary =
+                sleuthEvent.payload.summary === true ||
+                stageBrokerNamesRaw.length > 1 ||
+                Math.max(0, toNumber(sleuthEvent.payload.count)) > stageBrokerNamesRaw.length;
 
-              next = {
-                ...next,
-                brokerCount: next.brokerCount + 1,
-                radarTargets: [radarTarget, ...next.radarTargets].slice(0, 200),
-                pivotGraph: {
-                  ...next.pivotGraph,
-                  brokers: uniqueStrings([...next.pivotGraph.brokers, brokerName]),
-                },
-              };
+              const radarTargetsFromNames: RadarDot[] = stageBrokerNamesRaw.map((brokerName, index) => {
+                const angle = toNumber(sleuthEvent.payload.angle ?? ((index * 57) % 360));
+                const distance = normalizeDistance(toNumber(sleuthEvent.payload.distance ?? (0.5 + ((index % 4) * 0.1))));
+                return {
+                  id: `broker-discovery-${event.occurredAt}-${brokerName}-${index}`,
+                  angle,
+                  distance,
+                  broker: brokerName,
+                  status: "active",
+                  type: "email",
+                  color: colorForType("email"),
+                };
+              });
+
+              if (radarTargetsFromNames.length > 0) {
+                enqueueBrokerTargets(radarTargetsFromNames);
+              }
+
+              if (!isSummary && stageBrokerNamesRaw.length === 1) {
+                next = {
+                  ...next,
+                  agentStatuses: mergeAgentStatuses(next.agentStatuses, [
+                    buildAgentStatus({
+                      mode: "legal",
+                      status: "Active",
+                      task: `Mapped broker target ${stageBrokerNamesRaw[0]} for legal review.`,
+                    }),
+                  ]),
+                };
+              }
             }
 
             if (sleuthEvent.payload.stage === "identity_assembly") {
@@ -805,6 +933,10 @@ export function useDashboard(scanId: string | null): {
           case "exposure_found": {
             const threatType = inferThreatTypeFromData(sleuthEvent.payload.data_types);
             const nextExposureCount = next.exposureCount + 1;
+            const isNewBroker = !next.pivotGraph.brokers.includes(sleuthEvent.payload.broker_name);
+            const nextBrokers = isNewBroker
+              ? uniqueStrings([...next.pivotGraph.brokers, sleuthEvent.payload.broker_name])
+              : next.pivotGraph.brokers;
             const radarTarget: RadarDot = {
               id: `exposure-${event.occurredAt}-${sleuthEvent.payload.broker_name}`,
               angle: toNumber(sleuthEvent.payload.angle),
@@ -817,11 +949,12 @@ export function useDashboard(scanId: string | null): {
 
             next = {
               ...next,
+              brokerCount: Math.max(next.brokerCount + (isNewBroker ? 1 : 0), nextBrokers.length),
               exposureCount: nextExposureCount,
               radarTargets: [radarTarget, ...next.radarTargets].slice(0, 200),
               pivotGraph: {
                 ...next.pivotGraph,
-                brokers: uniqueStrings([...next.pivotGraph.brokers, sleuthEvent.payload.broker_name]),
+                brokers: nextBrokers,
               },
               threatBreakdown: {
                 ...next.threatBreakdown,
@@ -974,12 +1107,14 @@ export function useDashboard(scanId: string | null): {
     dashboardDebug("dashboard refetch started", { scanId });
 
     try {
-      const [dashboardResponse, pivotResponse] = await Promise.all([
+      const [dashboardResponse, pivotResponse, scanResponse] = await Promise.all([
         apiClient.get<DashboardResponse>(`/api/dashboard/${scanId}`),
         apiClient.get<PivotChainResponse>(`/v1/scans/${scanId}/dashboard/pivot-chain`),
+        apiClient.get<ScanStatusResponse>(`/v1/scans/${scanId}`),
       ]);
 
       const mappedDashboard = mapDashboardResponse(dashboardResponse.data);
+      const shouldStreamBrokers = isActiveScanStatus(scanResponse.data?.status);
       const pivotColumns = Array.isArray(pivotResponse.data?.columns)
         ? pivotResponse.data.columns
         : [];
@@ -991,19 +1126,46 @@ export function useDashboard(scanId: string | null): {
         return Array.isArray(found?.values) ? found.values.map((value) => String(value)) : [];
       };
 
-      setState((previous) => ({
-        ...mappedDashboard,
-        pivotGraph: {
-          emails: uniqueStrings(columnValues("emails")),
-          usernames: uniqueStrings(columnValues("usernames")),
-          platforms: uniqueStrings(columnValues("platforms")),
-          brokers: uniqueStrings([
-            ...mappedDashboard.pivotGraph.brokers,
-            ...columnValues("brokers"),
-          ]),
-        },
-        isLive: previous.isLive,
-      }));
+      if (shouldStreamBrokers && mappedDashboard.radarTargets.length > 0) {
+        enqueueBrokerTargets(mappedDashboard.radarTargets);
+      }
+
+      setState((previous) => {
+        if (shouldStreamBrokers) {
+          return {
+            ...previous,
+            deletionCount: mappedDashboard.deletionCount,
+            disputeCount: mappedDashboard.disputeCount,
+            pivotGraph: {
+              emails: uniqueStrings([...previous.pivotGraph.emails, ...columnValues("emails")]),
+              usernames: uniqueStrings([...previous.pivotGraph.usernames, ...columnValues("usernames")]),
+              platforms: uniqueStrings([...previous.pivotGraph.platforms, ...columnValues("platforms")]),
+              brokers: uniqueStrings(previous.pivotGraph.brokers),
+            },
+            agentStatuses:
+              previous.agentStatuses.length > 0 ? previous.agentStatuses : mappedDashboard.agentStatuses,
+            activityFeed:
+              previous.activityFeed.length > 0
+                ? previous.activityFeed
+                : mappedDashboard.activityFeed.slice(0, 3),
+            isLive: previous.isLive,
+          };
+        }
+
+        return {
+          ...mappedDashboard,
+          pivotGraph: {
+            emails: uniqueStrings(columnValues("emails")),
+            usernames: uniqueStrings(columnValues("usernames")),
+            platforms: uniqueStrings(columnValues("platforms")),
+            brokers: uniqueStrings([
+              ...mappedDashboard.pivotGraph.brokers,
+              ...columnValues("brokers"),
+            ]),
+          },
+          isLive: previous.isLive,
+        };
+      });
       setHasError(false);
       dashboardDebug("dashboard refetch succeeded", {
         scanId,
@@ -1011,6 +1173,7 @@ export function useDashboard(scanId: string | null): {
         exposures: mappedDashboard.exposureCount,
         activityCount: mappedDashboard.activityFeed.length,
         radarCount: mappedDashboard.radarTargets.length,
+        streamMode: shouldStreamBrokers,
       });
     } catch (error) {
       setState((previous) => ({
@@ -1023,6 +1186,24 @@ export function useDashboard(scanId: string | null): {
         ...toErrorContext(error),
       });
     }
+  }, [enqueueBrokerTargets, scanId]);
+
+  useEffect(() => {
+    if (!scanId) {
+      setState(EMPTY_STATE);
+      setPendingBrokerTargets([]);
+      setHasError(false);
+      return;
+    }
+
+    const cachedState = loadCachedDashboardState(scanId);
+    if (cachedState) {
+      setState(cachedState);
+    } else {
+      setState(EMPTY_STATE);
+    }
+    setPendingBrokerTargets([]);
+    setHasError(false);
   }, [scanId]);
 
   useEffect(() => {
@@ -1044,6 +1225,65 @@ export function useDashboard(scanId: string | null): {
   }, [refetch]);
 
   useEffect(() => {
+    if (!scanId || pendingBrokerTargets.length === 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const nextTarget = pendingBrokerTargets[0];
+      if (!nextTarget) {
+        return;
+      }
+
+      setPendingBrokerTargets((previous) => previous.slice(1));
+
+      setState((previous) => {
+        const key = brokerDiscoveryKey(nextTarget);
+        if (!key) {
+          return previous;
+        }
+
+        const alreadyKnown = previous.pivotGraph.brokers.some((brokerName) => brokerDiscoveryKey({ broker: brokerName }) === key);
+        if (alreadyKnown) {
+          return previous;
+        }
+
+        const nextBrokers = uniqueStrings([...previous.pivotGraph.brokers, nextTarget.broker]);
+        const nextExposureCount = previous.exposureCount + 1;
+        const nextOccurredAt = new Date().toISOString();
+        return {
+          ...previous,
+          brokerCount: Math.max(previous.brokerCount + 1, nextBrokers.length),
+          exposureCount: nextExposureCount,
+          threatBreakdown: {
+            ...previous.threatBreakdown,
+            [nextTarget.type]: previous.threatBreakdown[nextTarget.type] + 1,
+          },
+          radarTargets: [nextTarget, ...previous.radarTargets].slice(0, 200),
+          activityFeed: [
+            {
+              id: `broker-discovery-queue-${nextOccurredAt}-${nextTarget.broker}`,
+              type: "stage_complete",
+              message: `Broker discovery updated: ${nextTarget.broker}.`,
+              color: activityColorForEventType("stage_complete"),
+              createdAt: nextOccurredAt,
+            },
+            ...previous.activityFeed,
+          ].slice(0, 120),
+          pivotGraph: {
+            ...previous.pivotGraph,
+            brokers: nextBrokers,
+          },
+        };
+      });
+    }, 280);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [pendingBrokerTargets, scanId]);
+
+  useEffect(() => {
     dashboardDebug("realtime connection status changed", {
       scanId,
       connectionStatus,
@@ -1053,6 +1293,13 @@ export function useDashboard(scanId: string | null): {
       isLive: connectionStatus === "connected",
     }));
   }, [connectionStatus, scanId]);
+
+  useEffect(() => {
+    if (!scanId) {
+      return;
+    }
+    saveCachedDashboardState(scanId, state);
+  }, [scanId, state]);
 
   return {
     state,

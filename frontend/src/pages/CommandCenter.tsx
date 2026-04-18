@@ -12,7 +12,7 @@ import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { type RealtimeConnectionStatus } from "../lib/wsClient";
 import { ReaperCursor } from "../components/ReaperCursor";
 import { useDashboard } from "../lib/useDashboard";
-import { useScanStatusQuery } from "../lib/hooks";
+import { useEngagementsQuery, useScanStatusQuery } from "../lib/hooks";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -76,6 +76,26 @@ function trendLabel(series: number[]) {
     text: `${delta > 0 ? "+" : ""}${delta}`,
     up: delta > 0,
   };
+}
+
+function radarSignalLabel(distance: number): string {
+  if (distance <= 35) {
+    return "Near";
+  }
+  if (distance <= 70) {
+    return "Mid";
+  }
+  return "Far";
+}
+
+function formatThreatLabel(type: "email" | "phone" | "location"): string {
+  if (type === "email") {
+    return "Email Exposure";
+  }
+  if (type === "phone") {
+    return "Phone Leak";
+  }
+  return "Location Trace";
 }
 
 function StatCard({
@@ -270,16 +290,65 @@ function MetadataPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ProgressPill({ percent, status }: { percent: number; status: string }) {
+  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+
+  return (
+    <div
+      className="min-w-[220px] rounded-full px-4 py-2"
+      style={{
+        border: "1px dashed rgba(0,0,0,0.16)",
+        backgroundColor: "rgba(255,255,255,0.52)",
+      }}
+    >
+      <div
+        className="text-[0.72rem] uppercase tracking-[0.16em]"
+        style={{
+          fontFamily: "'Patrick Hand', cursive",
+          color: "rgba(31,31,31,0.58)",
+        }}
+      >
+        Progress
+      </div>
+      <div className="flex items-center gap-2 mt-1">
+        <div className="h-2.5 flex-1 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(31,31,31,0.08)" }}>
+          <motion.div
+            className="h-full rounded-full"
+            style={{ backgroundColor: COLORS.green }}
+            animate={{ width: `${safePercent}%` }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+          />
+        </div>
+        <span style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.text }}>
+          {safePercent}%
+        </span>
+      </div>
+      <div
+        className="text-[0.72rem] uppercase tracking-[0.08em] mt-1"
+        style={{
+          fontFamily: "'Patrick Hand', cursive",
+          color: "rgba(31,31,31,0.54)",
+        }}
+      >
+        {status}
+      </div>
+    </div>
+  );
+}
+
 export default function CommandCenter() {
   const navigate = useNavigate();
   const { clearActiveScan } = useScanContext();
   const scanId = useRequireScan();
   const scanQuery = useScanStatusQuery(scanId);
+  const engagementsQuery = useEngagementsQuery(scanId);
 
   const [isRadarExpanded, setIsRadarExpanded] = useState(false);
   const [isFeedExpanded, setIsFeedExpanded] = useState(false);
+  const [hoveredRadarDotId, setHoveredRadarDotId] = useState<string | null>(null);
   const [isStoppingScan, setIsStoppingScan] = useState(false);
   const [isStopped, setIsStopped] = useState(false);
+  const [displayProgress, setDisplayProgress] = useState(0);
   const { state, connectionStatus, hasError, refetch } = useDashboard(scanId);
   const realtimeStatus = connectionStatus;
 
@@ -318,26 +387,43 @@ export default function CommandCenter() {
     state.radarTargets.length,
   ]);
 
-  if (!scanId) {
-    return null;
-  }
-
   const radarTargets = state.radarTargets;
   const activityLogs = state.activityFeed;
   const agents = state.agentStatuses;
+  const engagements = engagementsQuery.data?.items ?? [];
+
+  const warRoomScenario = useMemo(() => {
+    if (!engagementsQuery.data) {
+      return null;
+    }
+
+    const hasEngagementRows = engagements.length > 0;
+    const shouldTrustEmptyWarRoom = state.brokerCount === 0;
+    if (!hasEngagementRows && !shouldTrustEmptyWarRoom) {
+      return null;
+    }
+
+    const deletionsSecured = engagements.filter((item) => item.status === "resolved").length;
+    const activeDisputes = engagements.filter((item) => item.status !== "resolved").length;
+
+    return {
+      deletionsSecured,
+      activeDisputes,
+    };
+  }, [engagements, engagementsQuery.data, state.brokerCount]);
 
   const stats = {
     brokersScanned: state.brokerCount,
     exposuresFound: state.exposureCount,
-    deletionsSecured: state.deletionCount,
-    activeDisputes: state.disputeCount,
+    deletionsSecured: warRoomScenario?.deletionsSecured ?? state.deletionCount,
+    activeDisputes: warRoomScenario?.activeDisputes ?? state.disputeCount,
   };
 
   const trends = {
     brokersScanned: [Math.max(0, state.brokerCount - 1), state.brokerCount],
     exposuresFound: [Math.max(0, state.exposureCount - 1), state.exposureCount],
-    deletionsSecured: [Math.max(0, state.deletionCount - 1), state.deletionCount],
-    activeDisputes: [Math.max(0, state.disputeCount - 1), state.disputeCount],
+    deletionsSecured: [Math.max(0, stats.deletionsSecured - 1), stats.deletionsSecured],
+    activeDisputes: [Math.max(0, stats.activeDisputes - 1), stats.activeDisputes],
   };
 
   const threatTotal = Math.max(
@@ -370,6 +456,43 @@ export default function CommandCenter() {
   const lastUpdatedAt = activityLogs[0]?.createdAt;
   const seedValue = scanQuery.data?.seed?.value?.trim() || "Awaiting seed sync";
   const seedLabel = scanQuery.data?.seed?.type === "phone" ? "Phone number" : "Email";
+  const backendProgress = Math.max(0, Math.min(100, Math.round(Number(scanQuery.data?.progress ?? 0))));
+  const backendStatus = String(scanQuery.data?.status ?? "discovering").replace(/_/g, " ");
+
+  useEffect(() => {
+    setDisplayProgress(0);
+  }, [scanId]);
+
+  useEffect(() => {
+    if (displayProgress === backendProgress) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDisplayProgress((previous) => {
+        if (previous === backendProgress) {
+          return previous;
+        }
+        const direction = backendProgress > previous ? 1 : -1;
+        const nextValue = previous + direction;
+        if (direction > 0 && nextValue > backendProgress) {
+          return backendProgress;
+        }
+        if (direction < 0 && nextValue < backendProgress) {
+          return backendProgress;
+        }
+        return nextValue;
+      });
+    }, 24);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [backendProgress, displayProgress]);
+
+  if (!scanId) {
+    return null;
+  }
 
   const statusLabel =
     isStopped
@@ -403,15 +526,39 @@ export default function CommandCenter() {
     { email: 0, phone: 0, location: 0 } as Record<"email" | "phone" | "location", number>
   );
 
-  const radarSvg = (
-    <div className="relative w-full max-w-[460px] aspect-square mx-auto">
+  const hoveredRadarDot = useMemo(
+    () => radarTargets.find((target) => target.id === hoveredRadarDotId) ?? null,
+    [hoveredRadarDotId, radarTargets]
+  );
+
+  useEffect(() => {
+    if (!hoveredRadarDotId) {
+      return;
+    }
+    const stillExists = radarTargets.some((target) => target.id === hoveredRadarDotId);
+    if (!stillExists) {
+      setHoveredRadarDotId(null);
+    }
+  }, [hoveredRadarDotId, radarTargets]);
+
+  useEffect(() => {
+    if (!isRadarExpanded) {
+      return;
+    }
+    if (!hoveredRadarDot && radarTargets.length > 0) {
+      setHoveredRadarDotId(radarTargets[0]?.id ?? null);
+    }
+  }, [hoveredRadarDot, isRadarExpanded, radarTargets]);
+
+  const renderRadar = (expanded: boolean) => (
+    <div className={`relative w-full aspect-square mx-auto ${expanded ? "max-w-[700px]" : "max-w-[460px]"}`}>
       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 400" style={{ filter: "url(#pencil-sketch)" }}>
         <defs>
           <radialGradient id="radar-glow" cx="50%" cy="50%" r="60%">
             <stop offset="0%" stopColor={COLORS.green} stopOpacity="0.24" />
             <stop offset="100%" stopColor={COLORS.green} stopOpacity="0" />
           </radialGradient>
-          <linearGradient id="radar-sweep" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id="radar-sweep" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={COLORS.green} stopOpacity="0" />
             <stop offset="100%" stopColor={COLORS.green} stopOpacity="0.45" />
           </linearGradient>
@@ -433,22 +580,32 @@ export default function CommandCenter() {
           />
         ))}
 
-        <motion.g
-          style={{ originX: "200px", originY: "200px" }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 5, ease: "linear", repeat: Infinity }}
-        >
+        <g>
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            from="0 200 200"
+            to="360 200 200"
+            dur={expanded ? "3.8s" : "5s"}
+            repeatCount="indefinite"
+          />
+          <path
+            d="M200 200 L194 2 A200 200 0 0 1 206 2 Z"
+            fill="url(#radar-sweep)"
+            opacity="0.52"
+          />
           <line
             x1="200"
             y1="200"
             x2="200"
-            y2="24"
-            stroke="url(#radar-sweep)"
-            strokeWidth="3"
+            y2="2"
+            stroke={COLORS.green}
+            strokeOpacity="0.75"
+            strokeWidth="2.4"
             strokeLinecap="round"
           />
-          <circle cx="200" cy="24" r="4" fill={COLORS.green} opacity="0.5" />
-        </motion.g>
+          <circle cx="200" cy="2" r="4" fill={COLORS.green} opacity="0.5" />
+        </g>
 
         <circle cx="200" cy="200" r="5" fill={COLORS.green} opacity="0.5" />
 
@@ -456,24 +613,41 @@ export default function CommandCenter() {
           const radians = (dot.angle * Math.PI) / 180;
           const x = 200 + Math.cos(radians) * (dot.distance * 2);
           const y = 200 + Math.sin(radians) * (dot.distance * 2);
+          const isHovered = hoveredRadarDotId === dot.id;
 
           return (
-            <g key={dot.id}>
-              <motion.circle cx={x} cy={y} r="15" fill={dot.color} opacity="0.18" />
+            <g
+              key={dot.id}
+              role="button"
+              tabIndex={0}
+              onMouseEnter={() => setHoveredRadarDotId(dot.id)}
+              onMouseLeave={() => setHoveredRadarDotId((previous) => (previous === dot.id ? null : previous))}
+              onFocus={() => setHoveredRadarDotId(dot.id)}
+              onBlur={() => setHoveredRadarDotId((previous) => (previous === dot.id ? null : previous))}
+              style={{ cursor: "pointer" }}
+            >
+              <title>{`${dot.broker} | ${formatThreatLabel(dot.type)} | ${dot.status}`}</title>
               <motion.circle
                 cx={x}
                 cy={y}
-                r="5"
+                r="15"
                 fill={dot.color}
-                stroke={COLORS.card}
-                strokeWidth="1"
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 0.95 }}
+                opacity={isHovered ? 0.3 : 0.18}
               />
               <motion.circle
                 cx={x}
                 cy={y}
-                r="6"
+                r={isHovered ? 6.2 : 5}
+                fill={dot.color}
+                stroke={COLORS.card}
+                strokeWidth="1"
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: isHovered ? 1 : 0.95 }}
+              />
+              <motion.circle
+                cx={x}
+                cy={y}
+                r={isHovered ? 9 : 6}
                 fill="none"
                 stroke={dot.color}
                 strokeWidth="1.3"
@@ -500,6 +674,59 @@ export default function CommandCenter() {
           </div>
         </div>
       </div>
+
+      {hoveredRadarDot && !expanded && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute left-1/2 bottom-2 -translate-x-1/2 px-3 py-2 rounded-lg border shadow-sm"
+          style={{
+            minWidth: 230,
+            borderColor: "rgba(0,0,0,0.15)",
+            backgroundColor: "rgba(253,251,247,0.92)",
+            pointerEvents: "none",
+          }}
+        >
+          <div className="text-base" style={{ fontFamily: "'Caveat', cursive", color: COLORS.text }}>
+            {hoveredRadarDot.broker}
+          </div>
+          <div className="text-xs flex items-center justify-between" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
+            <span>{formatThreatLabel(hoveredRadarDot.type)}</span>
+            <span>{hoveredRadarDot.status}</span>
+          </div>
+        </motion.div>
+      )}
+
+      {expanded && hoveredRadarDot && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute left-1/2 bottom-2 -translate-x-1/2 rounded-xl px-4 py-3 border shadow-sm"
+          style={{
+            width: "min(92%, 560px)",
+            borderColor: "rgba(0,0,0,0.16)",
+            backgroundColor: "rgba(253,251,247,0.96)",
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-2xl" style={{ fontFamily: "'Caveat', cursive", color: COLORS.text }}>
+                {hoveredRadarDot.broker}
+              </div>
+              <div className="text-sm" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
+                {formatThreatLabel(hoveredRadarDot.type)} detected
+              </div>
+            </div>
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: hoveredRadarDot.color }} />
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ fontFamily: "'Patrick Hand', cursive", color: COLORS.textSec }}>
+            <div>Status: {hoveredRadarDot.status}</div>
+            <div>Signal: {radarSignalLabel(hoveredRadarDot.distance)}</div>
+            <div>Bearing: {Math.round(hoveredRadarDot.angle)} deg</div>
+            <div>Range: {Math.round(hoveredRadarDot.distance)}</div>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 
@@ -627,6 +854,7 @@ export default function CommandCenter() {
             <MetadataPill label={seedLabel} value={seedValue} />
             <MetadataPill label="Scan ID" value={scanId} />
             <MetadataPill label="Last update" value={formatTimestamp(lastUpdatedAt)} />
+            <ProgressPill percent={displayProgress} status={backendStatus} />
           </div>
         </div>
 
@@ -787,7 +1015,7 @@ export default function CommandCenter() {
                   ))}
                 </div>
               </div>
-              <div className="relative w-full flex justify-center py-3">{radarSvg}</div>
+              <div className="relative w-full flex justify-center py-3">{renderRadar(false)}</div>
             </div>
 
             <div 
@@ -822,13 +1050,14 @@ export default function CommandCenter() {
                             No entries
                           </p>
                         )}
-                        {column.values.slice(0, 6).map((value) => (
+                        {column.values.slice(0, 6).map((value, index, values) => (
                           <p
                             key={`${column.label}-${value}`}
                             style={{ fontFamily: "'Patrick Hand', cursive", fontSize: "0.85rem", color: COLORS.text }}
                             title={value}
                           >
                             {value.length > 20 ? `${value.slice(0, 20)}...` : value}
+                            {index < values.length - 1 ? "," : ""}
                           </p>
                         ))}
                       </div>
@@ -925,7 +1154,7 @@ export default function CommandCenter() {
                   ))}
                 </div>
               </div>
-              <div className="w-full flex justify-center">{radarSvg}</div>
+              <div className="w-full flex justify-center">{renderRadar(true)}</div>
             </motion.div>
           </motion.div>
         )}

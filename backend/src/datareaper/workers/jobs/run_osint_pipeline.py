@@ -166,6 +166,58 @@ async def run_osint_pipeline(ctx: dict, scan_id: str) -> dict:
         for key in known_account_keys
         if key[0]
     }
+
+    existing_exposure_payloads = await session.execute(
+        select(ActivityEvent.payload).where(
+            ActivityEvent.scan_job_id == scan_id,
+            ActivityEvent.event_type == "exposure_found",
+        )
+    )
+    for payload in existing_exposure_payloads.scalars().all():
+        if not isinstance(payload, dict):
+            continue
+        url = str(payload.get("url") or "").strip().lower()
+        if url:
+            known_urls.add(url)
+
+    if seed_value:
+        sibling_scan_rows = await session.execute(
+            select(ScanJob.id)
+            .join(Seed, ScanJob.seed_id == Seed.id)
+            .where(
+                Seed.normalized_value == seed_value,
+                ScanJob.id != scan_id,
+            )
+        )
+        sibling_scan_ids = [str(row[0]) for row in sibling_scan_rows.all() if row and row[0]]
+
+        if sibling_scan_ids:
+            sibling_accounts = await session.execute(
+                select(
+                    DiscoveredAccount.platform,
+                    DiscoveredAccount.username,
+                    DiscoveredAccount.profile_url,
+                ).where(DiscoveredAccount.scan_job_id.in_(sibling_scan_ids))
+            )
+            for platform, username, profile_url in sibling_accounts.all():
+                key = _account_key(str(platform or ""), str(username or ""), str(profile_url or ""))
+                known_account_keys.add(key)
+                if key[0]:
+                    known_urls.add(key[0])
+
+            sibling_exposure_payloads = await session.execute(
+                select(ActivityEvent.payload).where(
+                    ActivityEvent.scan_job_id.in_(sibling_scan_ids),
+                    ActivityEvent.event_type == "exposure_found",
+                )
+            )
+            for payload in sibling_exposure_payloads.scalars().all():
+                if not isinstance(payload, dict):
+                    continue
+                url = str(payload.get("url") or "").strip().lower()
+                if url:
+                    known_urls.add(url)
+
     settings = get_settings()
     sites_found_in_cycle = 0
     deferred_exposure_events: list[dict] = []
@@ -432,7 +484,7 @@ async def run_osint_pipeline(ctx: dict, scan_id: str) -> dict:
         await session.commit()
 
         discover_job_id = None
-        if queue is not None and new_accounts > 0:
+        if queue is not None and (new_accounts > 0 or sites_found_in_cycle > 0):
             discover_job_id = await queue.enqueue("discover_targets", scan_id=scan_id)
 
         await session.refresh(scan, attribute_names=["status"])

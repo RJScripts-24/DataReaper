@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from urllib.parse import urlparse
 
 from sqlalchemy import select
@@ -21,6 +22,13 @@ from datareaper.realtime.publishers import publish
 
 logger = get_logger(__name__)
 MAX_TARGET_DEBUG_EVENTS = 120
+
+
+def _radar_coords(value: str) -> tuple[int, int]:
+    digest = hashlib.sha1(value.encode("utf-8")).digest()
+    angle = int(digest[0]) * 360 // 255
+    distance = 30 + (int(digest[1]) * 60 // 255)
+    return angle, distance
 
 
 def _normalize_host(url: str) -> str:
@@ -214,6 +222,8 @@ async def discover_targets(ctx: dict, scan_id: str) -> dict:
     existing_names = {case.broker_name for case in existing_result.scalars().all()}
 
     created = 0
+    created_broker_names: list[str] = []
+    broker_discovery_stream: list[dict] = []
     jurisdiction = scan.jurisdiction or "DPDP"
     for broker in broker_rows:
         broker_name = str(broker.get("broker_name") or "Unknown")
@@ -242,6 +252,15 @@ async def discover_targets(ctx: dict, scan_id: str) -> dict:
         session.add(case)
         existing_names.add(broker_name)
         created += 1
+        created_broker_names.append(broker_name)
+        angle, distance = _radar_coords(f"{scan_id}:{broker_name}")
+        broker_discovery_stream.append(
+            {
+                "broker_name": broker_name,
+                "angle": angle,
+                "distance": distance,
+            }
+        )
 
         logger.info(
             "discover_targets_broker_created",
@@ -292,6 +311,19 @@ async def discover_targets(ctx: dict, scan_id: str) -> dict:
     )
     await session.commit()
 
+    for broker_event in broker_discovery_stream:
+        await publish(
+            f"scan:{scan_id}",
+            {
+                "type": "stage_complete",
+                "stage": "broker_discovery",
+                "scan_id": scan_id,
+                "count": 1,
+                "summary": False,
+                **broker_event,
+            },
+        )
+
     if queue is not None:
         await queue.enqueue("send_legal_requests", scan_id=scan_id)
 
@@ -302,6 +334,8 @@ async def discover_targets(ctx: dict, scan_id: str) -> dict:
             "stage": "broker_discovery",
             "scan_id": scan_id,
             "count": created,
+            "broker_names": created_broker_names,
+            "summary": True,
             "exposure_events": len(exposure_events),
         },
     )

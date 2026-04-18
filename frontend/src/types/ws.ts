@@ -8,7 +8,9 @@ export type SleuthEvent =
         usernames?: string[];
         count?: number;
         emails?: string[];
+        broker_names?: string[];
         broker_name?: string;
+        summary?: boolean;
         angle?: number;
         distance?: number;
       };

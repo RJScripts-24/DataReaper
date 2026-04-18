@@ -33,6 +33,8 @@ const MOOD_IMAGE_MAP: Record<ReaperMood, string> = {
 
 const DEFAULT_MOOD: ReaperMood = "default";
 const DEFAULT_ZOOM: ReaperZoom = "base";
+const FOLLOWER_OFFSET_X = 32;
+const FOLLOWER_OFFSET_Y = 20;
 let hasCursorAnimatedOnce = false;
 
 const HOVERABLE_SELECTOR = [
@@ -138,6 +140,13 @@ function isDisabledElement(target: HTMLElement): boolean {
   return target.getAttribute("aria-disabled") === "true";
 }
 
+function toFollowerPosition(position: { x: number; y: number }): { x: number; y: number } {
+  return {
+    x: position.x + FOLLOWER_OFFSET_X,
+    y: position.y + FOLLOWER_OFFSET_Y,
+  };
+}
+
 function resolveHoverConfig(target: HTMLElement): HoverConfig {
   const explicitPhrases = parsePhrases(target.dataset.reaperPhrases ?? null);
   const explicitMood = parseMood(target.dataset.reaperExpression ?? null);
@@ -206,7 +215,6 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
     if (almostDone) {
       if (hasCursorAnimatedOnce) {
         setAnimationFinished(true);
-        document.documentElement.classList.add("hide-native-cursor");
         return;
       }
       
@@ -220,12 +228,12 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
           startY = rect.top + rect.height / 2;
         }
 
-        document.documentElement.classList.add("hide-native-cursor");
         setIsVisible(true);
         setAnimationFinished(true);
         isFlyingRef.current = true;
 
         if (trackerRef.current) {
+          const followerTarget = toFollowerPosition(latestMousePos.current);
           trackerRef.current.style.transition = 'none';
           trackerRef.current.style.transform = `translate(${startX}px, ${startY}px)`;
           trackerRef.current.style.opacity = '1';
@@ -233,7 +241,7 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
           trackerRef.current.getBoundingClientRect(); // force reflow
           
           trackerRef.current.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
-          trackerRef.current.style.transform = `translate(${latestMousePos.current.x}px, ${latestMousePos.current.y}px)`;
+          trackerRef.current.style.transform = `translate(${followerTarget.x}px, ${followerTarget.y}px)`;
         }
 
         setTimeout(() => {
@@ -250,11 +258,11 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
       setAnimationFinished(false);
       isFlyingRef.current = false;
       hasCursorAnimatedOnce = false;
-      document.documentElement.classList.remove("hide-native-cursor");
     }
   }, [almostDone]);
 
   useEffect(() => {
+    document.documentElement.classList.remove("hide-native-cursor");
     return () => {
       document.documentElement.classList.remove("hide-native-cursor");
     };
@@ -286,7 +294,8 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
 
       latestMousePos.current = { x: event.clientX, y: event.clientY };
       if (!isFlyingRef.current && trackerRef.current) {
-        trackerRef.current.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
+        const followerTarget = toFollowerPosition(latestMousePos.current);
+        trackerRef.current.style.transform = `translate(${followerTarget.x}px, ${followerTarget.y}px)`;
       }
       if (!isFlyingRef.current) {
         setIsVisible((previous) => (previous ? previous : true));

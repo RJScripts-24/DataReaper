@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     app_secret_key: str = "change-me"
     app_enable_demo_mode: bool = True
     app_auto_create_tables: bool = False
+    app_startup_db_timeout_seconds: float = 15.0
     supabase_url: str = ""
     supabase_key: str = ""
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"

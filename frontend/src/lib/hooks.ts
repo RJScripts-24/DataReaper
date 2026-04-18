@@ -57,7 +57,7 @@ export function useScanStatusQuery(scanId: string | null) {
     queryKey: scanId ? dataReaperQueryKeys.scan(scanId) : ["scan", "none"],
     queryFn: () => getScan(scanId as string),
     enabled: Boolean(scanId),
-    refetchInterval: 7000,
+    refetchInterval: 1200,
   });
 }
 
@@ -131,7 +131,7 @@ export function useEngagementsQuery(scanId: string | null, statuses?: Engagement
     queryKey: scanId ? dataReaperQueryKeys.engagements(scanId, statuses) : ["war-room", "none", "engagements"],
     queryFn: () => listEngagements(scanId as string, statuses),
     enabled: Boolean(scanId),
-    refetchInterval: 10000,
+    refetchInterval: 3000,
   });
 }
 

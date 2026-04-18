@@ -17,15 +17,6 @@ export default function Onboarding() {
   const [isLaunching, setIsLaunching] = useState(false);
   const [bootLogLines, setBootLogLines] = useState<string[]>([]);
 
-  const playBootLog = async (lines: string[]) => {
-    for (const line of lines) {
-      setBootLogLines((previous) => [...previous, line]);
-      await new Promise((resolve) => {
-        window.setTimeout(resolve, 250);
-      });
-    }
-  };
-
   const handleInitialize = async () => {
     const normalized = input.trim();
     if (!normalized || isLaunching) {
@@ -39,7 +30,6 @@ export default function Onboarding() {
     try {
       const response = await apiClient.post<{
         scan_id: string;
-        boot_log: string[];
       }>("/api/onboarding/initialize", {
         seeds: [normalized],
         seed_type: "auto",
@@ -47,11 +37,8 @@ export default function Onboarding() {
         consent_confirmed: true,
       });
 
-      const { scan_id, boot_log } = response.data;
+      const { scan_id } = response.data;
       setActiveScan(scan_id);
-
-      const lines = Array.isArray(boot_log) && boot_log.length > 0 ? boot_log : ["Booting Sleuth Agent..."];
-      await playBootLog(lines);
       navigate("/command-center");
     } catch (error) {
       const message = error instanceof ApiClientError ? error.message : "Failed to launch scan. Please retry.";

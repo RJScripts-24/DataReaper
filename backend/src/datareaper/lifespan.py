@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from time import perf_counter
 from urllib.parse import urlsplit
@@ -37,11 +38,20 @@ async def lifespan(app: FastAPI):
         log_level=settings.app_log_level,
         log_format=settings.app_log_format,
         auto_create_tables=settings.app_auto_create_tables,
+        startup_db_timeout_seconds=settings.app_startup_db_timeout_seconds,
         database_endpoint=_database_endpoint(settings.database_url),
     )
 
     if engine is not None:
-        await _check_database_connectivity(engine, settings.database_url)
+        try:
+            async with asyncio.timeout(settings.app_startup_db_timeout_seconds):
+                await _check_database_connectivity(engine, settings.database_url)
+        except TimeoutError:
+            logger.error(
+                "database_connectivity_check_timeout",
+                database_endpoint=_database_endpoint(settings.database_url),
+                timeout_seconds=settings.app_startup_db_timeout_seconds,
+            )
 
     if settings.app_auto_create_tables and engine is not None:
         logger.info("database_create_tables_begin")

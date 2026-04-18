@@ -100,11 +100,14 @@ export async function getIdentityGraphNode(scanId: string, nodeId: string): Prom
 
 export async function listEngagements(
   scanId: string,
-  statuses?: EngagementStatus[]
+  statuses?: EngagementStatus[],
+  options?: { cursor?: string; limit?: number }
 ): Promise<ListEngagementsResponse> {
   const { data } = await apiClient.get<ListEngagementsResponse>(`/v1/scans/${scanId}/war-room/engagements`, {
     params: {
       statuses: statuses?.length ? statuses.join(",") : undefined,
+      cursor: options?.cursor,
+      limit: options?.limit ?? 200,
     },
   });
   return data;
