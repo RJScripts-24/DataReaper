@@ -66,7 +66,7 @@ describe("Onboarding", () => {
 
     render(<Onboarding />);
 
-    fireEvent.change(screen.getByPlaceholderText("Email or Phone Number"), {
+    fireEvent.change(screen.getByPlaceholderText("Email"), {
       target: { value: "user@email.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Launch Sleuth Agent/i }));

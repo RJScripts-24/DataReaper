@@ -9,15 +9,28 @@ from typing import Any, TypeVar
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from datareaper.api.deps import DbSession, get_onboarding_service, get_scan_service
+from datareaper.comms.dispatch_recipients import resolve_dispatch_recipient
+from datareaper.comms.outbound_dispatcher import dispatch_notice
 from datareaper.core.config import get_settings
 from datareaper.core.exceptions import DataReaperError, InvalidSeedError, ResourceNotFoundError
+from datareaper.core.ids import new_id
 from datareaper.core.logging import get_logger
 from datareaper.db.in_memory import memory_store
+from datareaper.db.models.activity_event import ActivityEvent
 from datareaper.db.models.broker_case import BrokerCase
+from datareaper.db.models.email_message import EmailMessage
+from datareaper.db.models.email_thread import EmailThread
+from datareaper.db.models.legal_request import LegalRequest
+from datareaper.db.models.scan_job import ScanJob
+from datareaper.db.models.seed import Seed
 from datareaper.db.repositories.dashboard_repo import DashboardRepository, build_live_agent_statuses
 from datareaper.db.repositories.scan_repo import ScanRepository
+from datareaper.legal.citation_builder import build_citations
+from datareaper.legal.notice_builder import build_notice
+from datareaper.realtime.publishers import publish
 from datareaper.schemas.api_v1 import (
     ActivityLog,
     ActivityLogPage,
@@ -866,12 +879,88 @@ async def create_engagement_message(
 
         memory_store._scans[scanId] = bundle  # noqa: SLF001
     else:
-        target = await db.get(BrokerCase, engagementId)
-        if target is None or target.scan_job_id != scanId:
+        if payload.type != "agent":
+            target = await db.get(BrokerCase, engagementId)
+            if target is None or target.scan_job_id != scanId:
+                return _api_error(404, "engagement_not_found", f"Engagement '{engagementId}' was not found.")
+            target.last_activity_label = "just now"
+            await db.commit()
+            _MANUAL_MESSAGES.setdefault((scanId, engagementId), []).append(message)
+            return message
+
+        try:
+            target, _seed_value, gmail_thread_id, existing_subject, reply_to_message_id = await _load_dispatch_context(
+                db, scanId, engagementId
+            )
+        except ResourceNotFoundError:
             return _api_error(404, "engagement_not_found", f"Engagement '{engagementId}' was not found.")
-        target.last_activity_label = "just now"
+
+        recipient, invalid_reason = resolve_dispatch_recipient(target.broker_name)
+        if not recipient:
+            return _api_error(
+                409,
+                "invalid_broker_contact",
+                f"Cannot send message to {target.broker_name}: invalid or unverified broker contact ({invalid_reason}).",
+            )
+
+        broker_name = target.broker_name
+        subject = existing_subject or f"Data Deletion Request - {target.broker_name}"
+        if gmail_thread_id and not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}"
+
+        try:
+            dispatch_result = await dispatch_notice(
+                session=db,
+                broker_case_id=engagementId,
+                to_email=recipient,
+                subject=subject,
+                body=content,
+                thread_id=gmail_thread_id,
+                in_reply_to_message_id=reply_to_message_id,
+                last_activity_label="Manual reply sent",
+            )
+        except Exception as exc:
+            logger.exception(
+                "war_room_manual_reply_dispatch_failed",
+                scan_id=scanId,
+                engagement_id=engagementId,
+                broker_name=broker_name,
+                error=str(exc),
+            )
+            await db.rollback()
+            return _api_error(502, "message_dispatch_failed", "Failed to dispatch outbound message.")
+
+        db.add(
+            ActivityEvent(
+                id=new_id("evt"),
+                scan_job_id=scanId,
+                event_type="Comm",
+                message=f"Manual reply sent to {broker_name}.",
+                payload={
+                    "stage": "war_room_manual_reply",
+                    "broker_name": broker_name,
+                    "engagement_id": engagementId,
+                },
+            )
+        )
         await db.commit()
-        _MANUAL_MESSAGES.setdefault((scanId, engagementId), []).append(message)
+        await publish(
+            f"scan:{scanId}",
+            {
+                "type": "warroom.message_sent",
+                "scan_id": scanId,
+                "engagement_id": engagementId,
+                "broker_name": broker_name,
+            },
+        )
+
+        return EngagementMessage(
+            id=str(dispatch_result.get("local_message_id") or message.id),
+            type="agent",
+            content=content,
+            timestamp=str(dispatch_result.get("display_timestamp") or timestamp),
+            metadata=payload.metadata,
+        )
 
     return message
 
@@ -880,6 +969,95 @@ def _escalation_status(reason_code: str) -> str:
     if reason_code in {"illegal_request", "non_compliance"}:
         return "illegal"
     return "stalling"
+
+
+def _is_gmail_thread_id(thread_id: str | None) -> bool:
+    if not thread_id:
+        return False
+    value = str(thread_id).strip()
+    if not value:
+        return False
+    if value.startswith("thread_") or "_" in value:
+        return False
+    return len(value) >= 10
+
+
+def _escalation_reason_text(reason_code: str) -> str:
+    if reason_code == "illegal_request":
+        return "Your prior response requested excessive or unlawful identity artifacts."
+    if reason_code == "excessive_delay":
+        return "You have not responded within a reasonable compliance window."
+    if reason_code == "partial_compliance":
+        return "Your prior response only partially addressed the deletion request."
+    return "You have failed to comply with the prior deletion request."
+
+
+async def _load_dispatch_context(
+    db, scan_id: str, engagement_id: str
+) -> tuple[BrokerCase, str, str | None, str | None, str | None]:
+    target = await db.get(BrokerCase, engagement_id)
+    if target is None or target.scan_job_id != scan_id:
+        raise ResourceNotFoundError(f"Engagement '{engagement_id}' was not found.")
+
+    scan = await db.get(ScanJob, scan_id)
+    seed = await db.get(Seed, scan.seed_id) if scan is not None and scan.seed_id else None
+    seed_value = seed.normalized_value if seed is not None else ""
+
+    thread_result = await db.execute(
+        select(EmailThread).where(EmailThread.broker_case_id == engagement_id)
+    )
+    thread = thread_result.scalars().first()
+
+    gmail_thread_id = thread.external_thread_id if thread and _is_gmail_thread_id(thread.external_thread_id) else None
+    subject = thread.subject if thread and thread.subject else None
+
+    reply_to_message_id: str | None = None
+    if thread is not None:
+        message_result = await db.execute(
+            select(EmailMessage)
+            .where(EmailMessage.thread_id == thread.id, EmailMessage.direction == "broker")
+            .order_by(EmailMessage.created_at.desc())
+        )
+        latest_broker_message = message_result.scalars().first()
+        if latest_broker_message is not None:
+            metadata = latest_broker_message.metadata_json or {}
+            reply_to_message_id = (
+                metadata.get("rfc_message_id")
+                or metadata.get("reply_to_message_id")
+                or metadata.get("in_reply_to_message_id")
+            )
+            if reply_to_message_id is not None:
+                reply_to_message_id = str(reply_to_message_id)
+
+    return target, seed_value, gmail_thread_id, subject, reply_to_message_id
+
+
+def _build_escalation_notice(
+    broker_name: str,
+    jurisdiction: str,
+    seed_value: str,
+    note: str,
+    reason_code: str,
+) -> str:
+    base_notice = build_notice(
+        jurisdiction=jurisdiction,
+        seed=seed_value,
+        identity={"name": None, "location": None},
+        broker_name=broker_name,
+    )
+    reason_text = _escalation_reason_text(reason_code)
+    operator_note = note.strip()
+    escalation_note = (
+        f"\n\nEscalation notice:\n"
+        f"{reason_text}\n"
+        "This message is a formal escalation of the existing deletion request, and all previous deadlines remain in force."
+    )
+    if operator_note:
+        escalation_note += f"\n\nOperator note: {operator_note}"
+    escalation_note += (
+        "\n\nIf this request is not completed promptly, the matter will be preserved for regulatory complaint and further legal action."
+    )
+    return f"{base_notice}{escalation_note}"
 
 
 @router.post(
@@ -925,12 +1103,96 @@ async def escalate_engagement(
 
         memory_store._scans[scanId] = bundle  # noqa: SLF001
     else:
-        target = await db.get(BrokerCase, engagementId)
-        if target is None or target.scan_job_id != scanId:
+        try:
+            target, seed_value, gmail_thread_id, existing_subject, reply_to_message_id = await _load_dispatch_context(
+                db, scanId, engagementId
+            )
+        except ResourceNotFoundError:
             return _api_error(404, "engagement_not_found", f"Engagement '{engagementId}' was not found.")
+
+        recipient, invalid_reason = resolve_dispatch_recipient(target.broker_name)
+        if not recipient:
+            return _api_error(
+                409,
+                "invalid_broker_contact",
+                f"Cannot escalate {target.broker_name}: invalid or unverified broker contact ({invalid_reason}).",
+            )
+
+        jurisdiction = payload.legalFramework or target.jurisdiction or "DPDP"
+        subject = existing_subject or f"Data Deletion Request - {target.broker_name}"
+        if gmail_thread_id and not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}"
+
+        body = _build_escalation_notice(
+            broker_name=target.broker_name,
+            jurisdiction=jurisdiction,
+            seed_value=seed_value,
+            note=payload.note,
+            reason_code=payload.reasonCode,
+        )
+
+        legal_request = LegalRequest(
+            id=new_id("legal"),
+            broker_case_id=engagementId,
+            channel="email",
+            subject=subject,
+            body=body,
+            citations=build_citations(jurisdiction),
+            status="queued",
+        )
+        db.add(legal_request)
+        db.add(
+            ActivityEvent(
+                id=new_id("evt"),
+                scan_job_id=scanId,
+                event_type="Legal",
+                message=f"Escalation dispatched to {target.broker_name}.",
+                payload={
+                    "stage": "war_room_escalation",
+                    "broker_name": target.broker_name,
+                    "engagement_id": engagementId,
+                    "reason_code": payload.reasonCode,
+                    "legal_framework": jurisdiction,
+                },
+            )
+        )
+
+        try:
+            await dispatch_notice(
+                session=db,
+                broker_case_id=engagementId,
+                to_email=recipient,
+                subject=subject,
+                body=body,
+                thread_id=gmail_thread_id,
+                in_reply_to_message_id=reply_to_message_id,
+            )
+        except Exception as exc:
+            logger.exception(
+                "war_room_escalation_dispatch_failed",
+                scan_id=scanId,
+                engagement_id=engagementId,
+                broker_name=target.broker_name,
+                error=str(exc),
+            )
+            await db.rollback()
+            return _api_error(502, "escalation_dispatch_failed", "Failed to dispatch escalation notice.")
+
+        legal_request.status = "dispatched"
         target.status = status
-        target.last_activity_label = "just now"
+        target.jurisdiction = jurisdiction
+        target.last_activity_label = "Escalation dispatched"
         await db.commit()
+        await publish(
+            f"scan:{scanId}",
+            {
+                "type": "warroom.escalation_dispatched",
+                "scan_id": scanId,
+                "engagement_id": engagementId,
+                "broker_name": target.broker_name,
+                "reason_code": payload.reasonCode,
+            },
+        )
 
     return EscalateEngagementResponse(
         accepted=True,

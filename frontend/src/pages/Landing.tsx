@@ -8,7 +8,6 @@ import { FinalCTASection } from "../components/FinalCTASection";
 import { Footer } from "../components/Footer";
 import { PressureFilter } from "../components/PressureFilter";
 import { LandingRevealMask } from "../components/LandingRevealMask";
-import { ReaperCursor } from "../components/ReaperCursor";
 
 export default function Landing() {
   return (
@@ -23,7 +22,6 @@ export default function Landing() {
         <ProcessFlowSection />
         <FinalCTASection />
         <Footer />
-        <ReaperCursor />
       </LandingRevealMask>
     </div>
   );

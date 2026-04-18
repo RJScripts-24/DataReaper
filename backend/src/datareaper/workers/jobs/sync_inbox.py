@@ -8,6 +8,10 @@ from datareaper.db.models.scan_job import ScanJob
 from datareaper.db.repositories.scan_repo import is_terminal_scan_status
 from datareaper.db.session import SessionLocal
 from datareaper.legal.form_mapper import build_field_map
+from datareaper.core.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 async def _scan_is_terminal(scan_id: str) -> bool:
@@ -37,9 +41,10 @@ async def sync_inbox(ctx: dict, scan_id: str) -> dict:
     active_count = 0
     for update in updates:
         intent = update.get("intent")
-        thread_id = update.get("thread_id")
+        thread_id = update.get("gmail_thread_id")
         recipient = update.get("broker_email") or "privacy@broker.example"
         jurisdiction = update.get("jurisdiction") or "DPDP"
+        reply_to_message_id = update.get("reply_to_message_id")
         if intent in {"stalling", "illegal_pushback", "legal_violation"}:
             if llm is not None:
                 reply = await build_reply_with_llm(
@@ -53,12 +58,24 @@ async def sync_inbox(ctx: dict, scan_id: str) -> dict:
                 )
             else:
                 reply = build_reply(intent, jurisdiction)
-            gmail.send_message(
-                to=recipient,
-                subject="Re: Data Deletion Request",
-                body=reply,
-                thread_id=thread_id,
-            )
+            try:
+                gmail.send_message(
+                    to=recipient,
+                    subject="Re: Data Deletion Request",
+                    body=reply,
+                    thread_id=thread_id,
+                    in_reply_to_message_id=reply_to_message_id,
+                )
+            except Exception as exc:  # pragma: no cover - external API failures
+                logger.warning(
+                    "sync_inbox_reply_send_failed",
+                    scan_id=scan_id,
+                    broker_email=recipient,
+                    local_thread_id=update.get("thread_id"),
+                    gmail_thread_id=thread_id,
+                    error=str(exc),
+                )
+                continue
             active_count += 1
         elif intent == "form_request":
             broker_reply = update.get("body") or ""
@@ -78,15 +95,27 @@ async def sync_inbox(ctx: dict, scan_id: str) -> dict:
                             field_map,
                             "button[type='submit'],input[type='submit']",
                         )
-            gmail.send_message(
-                to=recipient,
-                subject="Re: Data Deletion Request Form",
-                body=(
-                    "We will submit only minimal required fields using previously provided "
-                    "information. No additional sensitive documents will be provided."
-                ),
-                thread_id=thread_id,
-            )
+            try:
+                gmail.send_message(
+                    to=recipient,
+                    subject="Re: Data Deletion Request Form",
+                    body=(
+                        "We will submit only minimal required fields using previously provided "
+                        "information. No additional sensitive documents will be provided."
+                    ),
+                    thread_id=thread_id,
+                    in_reply_to_message_id=reply_to_message_id,
+                )
+            except Exception as exc:  # pragma: no cover - external API failures
+                logger.warning(
+                    "sync_inbox_form_reply_send_failed",
+                    scan_id=scan_id,
+                    broker_email=recipient,
+                    local_thread_id=update.get("thread_id"),
+                    gmail_thread_id=thread_id,
+                    error=str(exc),
+                )
+                continue
             active_count += 1
 
     if active_count > 0 and queue is not None:

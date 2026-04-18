@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRevealState } from "../contexts/RevealContext";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "../styles/reaper-cursor.css";
 
 const DEFAULT_REAPER_IDLE_TIME = 5000;
@@ -33,9 +32,6 @@ const MOOD_IMAGE_MAP: Record<ReaperMood, string> = {
 
 const DEFAULT_MOOD: ReaperMood = "default";
 const DEFAULT_ZOOM: ReaperZoom = "base";
-const FOLLOWER_OFFSET_X = 32;
-const FOLLOWER_OFFSET_Y = 20;
-let hasCursorAnimatedOnce = false;
 
 const HOVERABLE_SELECTOR = [
   "[data-reaper-phrases]",
@@ -140,13 +136,6 @@ function isDisabledElement(target: HTMLElement): boolean {
   return target.getAttribute("aria-disabled") === "true";
 }
 
-function toFollowerPosition(position: { x: number; y: number }): { x: number; y: number } {
-  return {
-    x: position.x + FOLLOWER_OFFSET_X,
-    y: position.y + FOLLOWER_OFFSET_Y,
-  };
-}
-
 function resolveHoverConfig(target: HTMLElement): HoverConfig {
   const explicitPhrases = parsePhrases(target.dataset.reaperPhrases ?? null);
   const explicitMood = parseMood(target.dataset.reaperExpression ?? null);
@@ -204,70 +193,9 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
   const [isFacingLeft, setIsFacingLeft] = useState(false);
   const [bubbleSide, setBubbleSide] = useState<"top" | "bottom">("top");
 
-  const { almostDone } = useRevealState();
-  const [animationFinished, setAnimationFinished] = useState(hasCursorAnimatedOnce);
-  const isFlyingRef = useRef(false);
   const lastX = useRef(0);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
   const latestMousePos = useRef({ x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0 });
-
-  useEffect(() => {
-    if (almostDone) {
-      if (hasCursorAnimatedOnce) {
-        setAnimationFinished(true);
-        return;
-      }
-      
-      const t = setTimeout(() => {
-        let startX = window.innerWidth / 2;
-        let startY = window.innerHeight / 2;
-        const logoEl = document.querySelector('img[alt="DataReaper logo"]');
-        if (logoEl) {
-          const rect = logoEl.getBoundingClientRect();
-          startX = rect.left + rect.width / 2;
-          startY = rect.top + rect.height / 2;
-        }
-
-        setIsVisible(true);
-        setAnimationFinished(true);
-        isFlyingRef.current = true;
-
-        if (trackerRef.current) {
-          const followerTarget = toFollowerPosition(latestMousePos.current);
-          trackerRef.current.style.transition = 'none';
-          trackerRef.current.style.transform = `translate(${startX}px, ${startY}px)`;
-          trackerRef.current.style.opacity = '1';
-          
-          trackerRef.current.getBoundingClientRect(); // force reflow
-          
-          trackerRef.current.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
-          trackerRef.current.style.transform = `translate(${followerTarget.x}px, ${followerTarget.y}px)`;
-        }
-
-        setTimeout(() => {
-          isFlyingRef.current = false;
-          hasCursorAnimatedOnce = true;
-          if (trackerRef.current) {
-            trackerRef.current.style.transition = 'transform 0.08s ease-out, opacity 0.18s ease-out';
-          }
-        }, 650);
-
-      }, 1500);
-      return () => clearTimeout(t);
-    } else {
-      setAnimationFinished(false);
-      isFlyingRef.current = false;
-      hasCursorAnimatedOnce = false;
-    }
-  }, [almostDone]);
-
-  useEffect(() => {
-    document.documentElement.classList.remove("hide-native-cursor");
-    return () => {
-      document.documentElement.classList.remove("hide-native-cursor");
-    };
-  }, []);
-
   const canRender = useMemo(() => {
     if (!enabled || typeof window === "undefined") {
       return false;
@@ -279,6 +207,29 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
 
     return !window.matchMedia("(pointer: coarse)").matches;
   }, [enabled]);
+
+  useLayoutEffect(() => {
+    if (!canRender) {
+      document.documentElement.classList.remove("hide-native-cursor");
+      setIsVisible(false);
+      return;
+    }
+
+    document.documentElement.classList.add("hide-native-cursor");
+    setIsVisible(true);
+
+    if (trackerRef.current) {
+      trackerRef.current.style.transition = "none";
+      trackerRef.current.style.transform = `translate(${latestMousePos.current.x}px, ${latestMousePos.current.y}px)`;
+      trackerRef.current.style.opacity = "1";
+      trackerRef.current.getBoundingClientRect();
+      trackerRef.current.style.transition = "transform 0.08s ease-out, opacity 0.18s ease-out";
+    }
+
+    return () => {
+      document.documentElement.classList.remove("hide-native-cursor");
+    };
+  }, [canRender]);
 
   useEffect(() => {
     if (!canRender) {
@@ -293,13 +244,10 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
       lastX.current = event.clientX;
 
       latestMousePos.current = { x: event.clientX, y: event.clientY };
-      if (!isFlyingRef.current && trackerRef.current) {
-        const followerTarget = toFollowerPosition(latestMousePos.current);
-        trackerRef.current.style.transform = `translate(${followerTarget.x}px, ${followerTarget.y}px)`;
+      if (trackerRef.current) {
+        trackerRef.current.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
       }
-      if (!isFlyingRef.current) {
-        setIsVisible((previous) => (previous ? previous : true));
-      }
+      setIsVisible((previous) => (previous ? previous : true));
 
       // Check collision for bubble
       if (event.clientY < 250) {
@@ -405,12 +353,12 @@ export function ReaperCursor({ enabled = true }: { enabled?: boolean }) {
   }
 
   return (
-    <div 
-      ref={trackerRef} 
-      className={`reaper-cursor-root${isVisible && animationFinished ? " is-visible" : ""}`} 
+    <div
+      ref={trackerRef}
+      className={`reaper-cursor-root${isVisible ? " is-visible" : ""}`}
       aria-hidden="true"
-      style={{ 
-        opacity: animationFinished ? undefined : 0, 
+      style={{
+        opacity: isVisible ? undefined : 0,
         transition: 'opacity 0.2s ease-in-out',
         zIndex: 99999
       }}
