@@ -21,6 +21,50 @@ EMAIL_REGEX = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 logger = get_logger(__name__)
 
+PROFILE_PATH_MARKERS = (
+    "/@",
+    "/in/",
+    "/u/",
+    "/user/",
+    "/users/",
+    "/member/",
+    "/members/",
+    "/profile/",
+    "/profiles/",
+    "/people/",
+    "/person/",
+    "/channel/",
+)
+
+NON_PROFILE_HOST_MARKERS = (
+    "docs.",
+    "support.",
+    "status.",
+    "help.",
+)
+
+NON_PROFILE_PATH_MARKERS = (
+    "/search",
+    "/login",
+    "/auth",
+    "/security",
+    "/support",
+    "/docs",
+    "/help",
+    "/about",
+    "/press",
+    "/news",
+    "/careers",
+    "/privacy",
+    "/policies",
+    "/policy",
+    "/terms",
+    "/agreement",
+    "/site-policy",
+    "/legal",
+    "/contact",
+)
+
 
 def _confidence(name: str | None, location: str | None, employer: str | None) -> float:
     score = 0.0
@@ -153,6 +197,28 @@ def _extract_usernames_from_url(url: str) -> list[str]:
     return usernames[:5]
 
 
+def is_profile_candidate_url(url: str) -> bool:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower().replace("www.", "")
+    path = parsed.path or "/"
+    lowered_path = path.lower()
+    segments = [part for part in lowered_path.split("/") if part]
+
+    if not host:
+        return False
+    if any(host.startswith(marker) for marker in NON_PROFILE_HOST_MARKERS):
+        return False
+    if any(marker in lowered_path for marker in NON_PROFILE_PATH_MARKERS):
+        return False
+    if any(marker in lowered_path for marker in PROFILE_PATH_MARKERS):
+        return True
+    if host in {"t.me", "github.com", "reddit.com", "x.com", "twitter.com", "instagram.com"}:
+        return len(segments) == 1 and bool(re.fullmatch(r"@?[a-z0-9_.-]{3,40}", segments[0]))
+    return 1 <= len(segments) <= 2 and any(
+        re.fullmatch(r"@?[a-z0-9_.-]{3,40}", segment) for segment in segments
+    )
+
+
 async def _extract_with_llm(url: str, html: str, llm: BaseLLMClient | None) -> dict:
     if llm is None:
         return {}
@@ -178,6 +244,7 @@ async def scrape_profile(
     browser: PlaywrightClient,
     llm: BaseLLMClient | None = None,
 ) -> dict:
+    candidate = is_profile_candidate_url(url)
     result = await browser.fetch(url)
     html = result.get("html") or ""
     if not html:
@@ -194,6 +261,7 @@ async def scrape_profile(
             "same_as_urls": [],
             "social_handles": {},
             "image_url": None,
+            "is_profile_candidate": candidate,
         }
 
     fast = _extract_from_html(html)
@@ -208,7 +276,7 @@ async def scrape_profile(
     image_url = fast.get("image_url")
 
     confidence = _confidence(name, location, employer)
-    if confidence < 0.8:
+    if candidate and confidence < 0.8:
         llm_payload = await _extract_with_llm(url, html, llm)
         name = name or llm_payload.get("name")
         location = location or llm_payload.get("location")
@@ -255,7 +323,7 @@ async def scrape_profile(
             image_url = str(llm_image)
 
     evidence_url = None
-    if confidence > 0.8 and (name or location):
+    if candidate and confidence > 0.8 and (name or location):
         screenshot = await browser.capture_screenshot(url)
         if screenshot:
             parsed = urlparse(url)
@@ -279,4 +347,5 @@ async def scrape_profile(
         "same_as_urls": same_as_urls,
         "social_handles": social_handles,
         "image_url": image_url,
+        "is_profile_candidate": candidate,
     }

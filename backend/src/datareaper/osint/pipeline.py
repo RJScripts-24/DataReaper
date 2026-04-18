@@ -15,11 +15,11 @@ from datareaper.osint.collectors.github_pivot import github_deep_pivot, github_u
 from datareaper.osint.collectors.gravatar_lookup import lookup_gravatar
 from datareaper.osint.collectors.paste_site_search import search_paste_sites
 from datareaper.osint.collectors.platform_prober import probe_usernames
-from datareaper.osint.collectors.profile_scraper import scrape_profile
+from datareaper.osint.collectors.profile_scraper import is_profile_candidate_url, scrape_profile
 from datareaper.osint.collectors.search_probe import build_search_queries, search_public_web
 from datareaper.osint.graph_builder import build_graph
 from datareaper.osint.identity_resolver import resolve_identity
-from datareaper.osint.username_discovery import discover_usernames
+from datareaper.osint.username_discovery import discover_usernames, is_plausible_username
 from datareaper.realtime.channels import DASHBOARD_CHANNEL
 from datareaper.realtime.publishers import publish
 
@@ -27,6 +27,12 @@ logger = get_logger(__name__)
 DEFAULT_TARGETS = ["Apollo.io", "Spokeo", "Whitepages"]
 SiteFoundCallback = Callable[[dict], Awaitable[None] | None]
 ShouldStopCallback = Callable[[], Awaitable[bool] | bool]
+
+
+def _add_username(container: set[str], value: str | None) -> None:
+    candidate = str(value or "").strip().lower().lstrip("@")
+    if is_plausible_username(candidate):
+        container.add(candidate)
 
 
 async def _run_health_check(browser: PlaywrightClient) -> dict[str, bool]:
@@ -226,7 +232,7 @@ async def run_osint_loop(
                                 )
                         username = gravatar.get("preferred_username")
                         if username:
-                            discovered_usernames.add(str(username).strip().lower())
+                            _add_username(discovered_usernames, str(username))
                     boot_log.append(
                         f"Layer 0 (gravatar): {'hit' if gravatar else 'miss'} for {email_seed}."
                     )
@@ -287,7 +293,9 @@ async def run_osint_loop(
                 list(accounts_by_url.values()),
                 original_seeds=sorted(known_identifiers),
             )
-            discovered_usernames.update(expanded_usernames)
+            discovered_usernames.update(
+                username for username in expanded_usernames if is_plausible_username(username)
+            )
 
             github_email_usernames: set[str] = set()
             if email_seeds:
@@ -316,8 +324,9 @@ async def run_osint_loop(
                         if not username:
                             continue
 
-                        discovered_usernames.add(username)
-                        github_email_usernames.add(username)
+                        _add_username(discovered_usernames, username)
+                        if is_plausible_username(username):
+                            github_email_usernames.add(username)
 
                         account_key = url or f"github:{username}"
                         if account_key not in accounts_by_url:
@@ -366,8 +375,7 @@ async def run_osint_loop(
                     )
 
                 uname = str(hit.get("username") or "").strip().lower()
-                if uname:
-                    discovered_usernames.add(uname)
+                _add_username(discovered_usernames, uname)
 
                 key = url or f"{hit.get('platform')}:{uname}"
                 if key not in accounts_by_url:
@@ -404,7 +412,7 @@ async def run_osint_loop(
                         pending_identifiers.add(value)
                 twitter_username = str(pivot.get("twitter_username") or "").strip()
                 if twitter_username:
-                    discovered_usernames.add(twitter_username.lstrip("@").lower())
+                    _add_username(discovered_usernames, twitter_username)
                 blog_url = str(pivot.get("blog") or "").strip()
                 if (
                     blog_url.startswith("http")
@@ -493,7 +501,12 @@ async def run_osint_loop(
 
             discovered_urls.update(newly_discovered_urls)
 
-            urls_to_scrape = [url for url in sorted(discovered_urls) if url not in profiles_by_url]
+            urls_to_scrape = [
+                url
+                for url in sorted(discovered_urls)
+                if url not in profiles_by_url and is_profile_candidate_url(url)
+            ]
+            skipped_non_profile_urls = max(0, len(discovered_urls) - len(profiles_by_url) - len(urls_to_scrape))
             scrape_runs = await asyncio.gather(
                 *[scrape_profile(url, active_browser, llm) for url in urls_to_scrape],
                 return_exceptions=True,
@@ -506,7 +519,12 @@ async def run_osint_loop(
                 profiles_by_url[url] = result
                 new_profiles += 1
 
+                can_pivot_email = bool(result.get("is_profile_candidate")) and float(
+                    result.get("confidence") or 0.0
+                ) >= 0.75
                 for email in result.get("discovered_emails", []) or []:
+                    if not can_pivot_email:
+                        continue
                     value = str(email).strip().lower()
                     if value and value not in known_identifiers:
                         known_identifiers.add(value)
@@ -529,8 +547,7 @@ async def run_osint_loop(
 
                 for username in result.get("discovered_usernames", []) or []:
                     value = str(username).strip().lower()
-                    if value:
-                        discovered_usernames.add(value)
+                    _add_username(discovered_usernames, value)
                     if value and value not in known_identifiers:
                         known_identifiers.add(value)
                         pending_identifiers.add(value)
@@ -540,6 +557,10 @@ async def run_osint_loop(
             boot_log.append(
                 f"Layer 3 (smart scraper): analyzed {new_profiles} new profile page(s)."
             )
+            if skipped_non_profile_urls:
+                boot_log.append(
+                    f"Layer 3 (smart scraper): skipped {skipped_non_profile_urls} non-profile URL(s)."
+                )
             await _publish_stage(
                 {
                     "type": "osint_layer_complete",

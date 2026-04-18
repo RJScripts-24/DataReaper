@@ -1,9 +1,63 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import apiClient from "./apiClient";
 import type { RealtimeChannel } from "./api";
 import { useRealtimeSubscription, type RealtimeConnectionStatus } from "./wsClient";
 import type { SleuthEvent } from "../types/ws";
+
+const DASHBOARD_LOG_PREFIX = "[datareaper:dashboard]";
+const DASHBOARD_DEBUG_ENABLED = import.meta.env.DEV || import.meta.env.VITE_DEBUG_DASHBOARD === "true";
+
+function dashboardDebug(message: string, context?: Record<string, unknown>): void {
+  if (!DASHBOARD_DEBUG_ENABLED) {
+    return;
+  }
+  if (context) {
+    console.debug(`${DASHBOARD_LOG_PREFIX} ${message}`, context);
+    return;
+  }
+  console.debug(`${DASHBOARD_LOG_PREFIX} ${message}`);
+}
+
+function dashboardWarn(message: string, context?: Record<string, unknown>): void {
+  if (context) {
+    console.warn(`${DASHBOARD_LOG_PREFIX} ${message}`, context);
+    return;
+  }
+  console.warn(`${DASHBOARD_LOG_PREFIX} ${message}`);
+}
+
+function dashboardError(message: string, context?: Record<string, unknown>): void {
+  if (context) {
+    console.error(`${DASHBOARD_LOG_PREFIX} ${message}`, context);
+    return;
+  }
+  console.error(`${DASHBOARD_LOG_PREFIX} ${message}`);
+}
+
+function toErrorContext(error: unknown): Record<string, unknown> {
+  if (typeof error !== "object" || error === null) {
+    return { error: String(error) };
+  }
+
+  const candidate = error as {
+    name?: unknown;
+    message?: unknown;
+    code?: unknown;
+    response?: { status?: unknown; data?: unknown };
+    config?: { url?: unknown; method?: unknown };
+  };
+
+  return {
+    name: typeof candidate.name === "string" ? candidate.name : "UnknownError",
+    message: typeof candidate.message === "string" ? candidate.message : String(error),
+    code: candidate.code,
+    status: candidate.response?.status,
+    url: candidate.config?.url,
+    method: candidate.config?.method,
+    responseData: candidate.response?.data,
+  };
+}
 
 type DashboardStat = {
   title: string;
@@ -299,6 +353,10 @@ function eventMessage(event: SleuthEvent): string {
       return "Agent resumed after CAPTCHA resolution.";
     case "scan_stopped":
       return "Scan stopped by user command.";
+    case "scan_lifecycle_updated":
+      return `Scan lifecycle updated: ${event.payload.status}${
+        event.payload.current_stage ? ` (${event.payload.current_stage})` : ""
+      }.`;
     default:
       return "Realtime update received.";
   }
@@ -399,6 +457,18 @@ function parseSleuthEvent(raw: { event: string; payload: Record<string, unknown>
           reason: String(payload.reason ?? "manual"),
         },
       };
+    case "scans.lifecycle.updated":
+      return {
+        event: "scan_lifecycle_updated",
+        payload: {
+          status: String(payload.status ?? "unknown"),
+          current_stage:
+            payload.current_stage === undefined
+              ? undefined
+              : String(payload.current_stage),
+          reason: payload.reason === undefined ? undefined : String(payload.reason),
+        },
+      };
     default:
       return null;
   }
@@ -407,8 +477,11 @@ function parseSleuthEvent(raw: { event: string; payload: Record<string, unknown>
 export function useDashboard(scanId: string | null): {
   state: LiveDashboardState;
   connectionStatus: RealtimeConnectionStatus;
+  hasError: boolean;
+  refetch: () => Promise<void>;
 } {
   const [state, setState] = useState<LiveDashboardState>(EMPTY_STATE);
+  const [hasError, setHasError] = useState(false);
 
   const realtimeChannels = useMemo<RealtimeChannel[]>(
     () => ["dashboard.summary", "dashboard.radar", "dashboard.activity", "dashboard.agents", "scans.lifecycle"],
@@ -421,13 +494,29 @@ export function useDashboard(scanId: string | null): {
     channels: realtimeChannels,
     onEvent: (event) => {
       if (!scanId || event.scanId !== scanId) {
+        dashboardDebug("ignoring realtime event for different scan", {
+          activeScanId: scanId,
+          eventScanId: event.scanId,
+          event: event.event,
+        });
         return;
       }
 
       const sleuthEvent = parseSleuthEvent({ event: event.event, payload: event.payload });
       if (!sleuthEvent) {
+        dashboardDebug("received unsupported realtime event", {
+          scanId,
+          event: event.event,
+          payload: event.payload,
+        });
         return;
       }
+
+      dashboardDebug("processing realtime event", {
+        scanId,
+        event: sleuthEvent.event,
+        occurredAt: event.occurredAt,
+      });
 
       setState((previous) => {
         let next = previous;
@@ -574,6 +663,7 @@ export function useDashboard(scanId: string | null): {
           case "captcha_block":
           case "agent_resumed":
           case "scan_stopped":
+          case "scan_lifecycle_updated":
             break;
         }
 
@@ -585,59 +675,77 @@ export function useDashboard(scanId: string | null): {
     },
   });
 
-  useEffect(() => {
+  const refetch = useCallback(async () => {
     if (!scanId) {
+      dashboardDebug("refetch skipped because scanId is missing");
       setState(EMPTY_STATE);
+      setHasError(false);
       return;
     }
 
+    dashboardDebug("dashboard refetch started", { scanId });
+
+    try {
+      const [dashboardResponse, pivotResponse] = await Promise.all([
+        apiClient.get<DashboardResponse>(`/api/dashboard/${scanId}`),
+        apiClient.get<PivotChainResponse>(`/v1/scans/${scanId}/dashboard/pivot-chain`),
+      ]);
+
+      const mappedDashboard = mapDashboardResponse(dashboardResponse.data);
+      const pivotColumns = Array.isArray(pivotResponse.data?.columns)
+        ? pivotResponse.data.columns
+        : [];
+
+      const columnValues = (label: string) => {
+        const found = pivotColumns.find(
+          (column) => String(column?.label || "").trim().toLowerCase() === label
+        );
+        return Array.isArray(found?.values) ? found.values.map((value) => String(value)) : [];
+      };
+
+      setState((previous) => ({
+        ...mappedDashboard,
+        pivotGraph: {
+          emails: uniqueStrings(columnValues("emails")),
+          usernames: uniqueStrings(columnValues("usernames")),
+          platforms: uniqueStrings(columnValues("platforms")),
+          brokers: uniqueStrings([
+            ...mappedDashboard.pivotGraph.brokers,
+            ...columnValues("brokers"),
+          ]),
+        },
+        isLive: previous.isLive,
+      }));
+      setHasError(false);
+      dashboardDebug("dashboard refetch succeeded", {
+        scanId,
+        brokers: mappedDashboard.brokerCount,
+        exposures: mappedDashboard.exposureCount,
+        activityCount: mappedDashboard.activityFeed.length,
+        radarCount: mappedDashboard.radarTargets.length,
+      });
+    } catch (error) {
+      setState((previous) => ({
+        ...previous,
+        isLive: false,
+      }));
+      setHasError(true);
+      dashboardError("dashboard refetch failed", {
+        scanId,
+        ...toErrorContext(error),
+      });
+    }
+  }, [scanId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadDashboard = async () => {
-      try {
-        const [dashboardResponse, pivotResponse] = await Promise.all([
-          apiClient.get<DashboardResponse>(`/api/dashboard/${scanId}`),
-          apiClient.get<PivotChainResponse>(`/v1/scans/${scanId}/dashboard/pivot-chain`),
-        ]);
-        if (cancelled) {
-          return;
-        }
-
-        const mappedDashboard = mapDashboardResponse(dashboardResponse.data);
-        const pivotColumns = Array.isArray(pivotResponse.data?.columns)
-          ? pivotResponse.data.columns
-          : [];
-
-        const columnValues = (label: string) => {
-          const found = pivotColumns.find(
-            (column) => String(column?.label || "").trim().toLowerCase() === label
-          );
-          return Array.isArray(found?.values) ? found.values.map((value) => String(value)) : [];
-        };
-
-        setState((previous) => ({
-          ...mappedDashboard,
-          pivotGraph: {
-            emails: uniqueStrings(columnValues("emails")),
-            usernames: uniqueStrings(columnValues("usernames")),
-            platforms: uniqueStrings(columnValues("platforms")),
-            brokers: uniqueStrings([
-              ...mappedDashboard.pivotGraph.brokers,
-              ...columnValues("brokers"),
-            ]),
-          },
-          isLive: previous.isLive,
-        }));
-      } catch {
-        if (cancelled) {
-          return;
-        }
-
-        setState((previous) => ({
-          ...previous,
-          isLive: false,
-        }));
+      if (cancelled) {
+        dashboardDebug("initial dashboard load skipped because effect was cancelled", { scanId });
+        return;
       }
+      await refetch();
     };
 
     void loadDashboard();
@@ -645,17 +753,23 @@ export function useDashboard(scanId: string | null): {
     return () => {
       cancelled = true;
     };
-  }, [scanId]);
+  }, [refetch]);
 
   useEffect(() => {
+    dashboardDebug("realtime connection status changed", {
+      scanId,
+      connectionStatus,
+    });
     setState((previous) => ({
       ...previous,
       isLive: connectionStatus === "connected",
     }));
-  }, [connectionStatus]);
+  }, [connectionStatus, scanId]);
 
   return {
     state,
     connectionStatus,
+    hasError,
+    refetch,
   };
 }

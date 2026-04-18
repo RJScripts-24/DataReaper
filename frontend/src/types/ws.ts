@@ -63,6 +63,14 @@ export type SleuthEvent =
         current_stage: string;
         reason: string;
       };
+    }
+  | {
+      event: "scan_lifecycle_updated";
+      payload: {
+        status: string;
+        current_stage?: string;
+        reason?: string;
+      };
     };
 
 export type AgentEvent =

@@ -158,13 +158,14 @@ class PlaywrightClient:
             status = response.status if response is not None else 0
             return {
                 "url": url,
+                "final_url": page.url or url,
                 "html": html,
                 "status": status,
                 "timed_out": timed_out,
             }
         except Exception as exc:  # pragma: no cover - browser/network exceptions
             logger.warning("playwright_fetch_failed", url=url, error=str(exc))
-            return {"url": url, "html": "", "status": 0, "error": str(exc)}
+            return {"url": url, "final_url": url, "html": "", "status": 0, "error": str(exc)}
         finally:
             await context.close()
 

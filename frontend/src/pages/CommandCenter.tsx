@@ -9,7 +9,7 @@ import { PressureFilter } from "../components/PressureFilter";
 import { PressureText } from "../components/PressureText";
 import { stopScan } from "../lib/api";
 import { useScanContext, useRequireScan } from "../lib/scanContext";
-import { useRealtimeSubscription, type RealtimeConnectionStatus } from "../lib/wsClient";
+import { type RealtimeConnectionStatus } from "../lib/wsClient";
 import { ReaperCursor } from "../components/ReaperCursor";
 import { useDashboard } from "../lib/useDashboard";
 
@@ -242,8 +242,43 @@ export default function CommandCenter() {
   const [isFeedExpanded, setIsFeedExpanded] = useState(false);
   const [isStoppingScan, setIsStoppingScan] = useState(false);
   const [isStopped, setIsStopped] = useState(false);
-  const { state, connectionStatus } = useDashboard(scanId);
+  const { state, connectionStatus, hasError, refetch } = useDashboard(scanId);
   const realtimeStatus = connectionStatus;
+
+  useEffect(() => {
+    if (!scanId) {
+      console.debug("[datareaper:command-center] missing scanId; rendering null until scan is available");
+    }
+  }, [scanId]);
+
+  useEffect(() => {
+    if (state.activityFeed.some((entry) => entry.type === "scan_stopped")) {
+      setIsStopped(true);
+    }
+  }, [state.activityFeed]);
+
+  useEffect(() => {
+    if (!hasError) {
+      return;
+    }
+
+    console.error("[datareaper:command-center] dashboard is in error state", {
+      scanId,
+      connectionStatus,
+      brokerCount: state.brokerCount,
+      exposureCount: state.exposureCount,
+      activityCount: state.activityFeed.length,
+      radarCount: state.radarTargets.length,
+    });
+  }, [
+    connectionStatus,
+    hasError,
+    scanId,
+    state.activityFeed.length,
+    state.brokerCount,
+    state.exposureCount,
+    state.radarTargets.length,
+  ]);
 
   if (!scanId) {
     return null;
@@ -252,12 +287,6 @@ export default function CommandCenter() {
   const radarTargets = state.radarTargets;
   const activityLogs = state.activityFeed;
   const agents = state.agentStatuses;
-
-  useEffect(() => {
-    if (activityLogs.some((entry) => entry.type === "scan_stopped")) {
-      setIsStopped(true);
-    }
-  }, [activityLogs]);
 
   const stats = {
     brokersScanned: state.brokerCount,
@@ -564,11 +593,7 @@ export default function CommandCenter() {
               type="button"
               className="hand-drawn-button mt-2 px-3 py-1"
               onClick={() => {
-                void summaryQuery.refetch();
-                void radarQuery.refetch();
-                void activityQuery.refetch();
-                void agentsQuery.refetch();
-                void pivotQuery.refetch();
+                void refetch();
               }}
             >
               Retry Data Fetch

@@ -11,6 +11,7 @@ from curl_cffi.requests import AsyncSession
 
 from datareaper.core.config import get_settings
 from datareaper.core.logging import get_logger
+from datareaper.osint.username_discovery import is_plausible_username
 
 if TYPE_CHECKING:
     from datareaper.integrations.browser.playwright_client import PlaywrightClient
@@ -92,11 +93,29 @@ def _looks_like_profile_timeout_hit(url: str, username: str, html: str) -> bool:
     )
 
 
+def _username_signal_variants(username: str) -> set[str]:
+    normalized = username.strip().lower().lstrip("@")
+    compact = re.sub(r"[._-]", "", normalized)
+    return {item for item in {normalized, compact} if item}
+
+
+def _has_username_signal(username: str, title: str, html: str) -> bool:
+    title_lower = title.lower()
+    snippet = html[:8000].lower()
+
+    for variant in _username_signal_variants(username):
+        if variant in title_lower or variant in snippet:
+            return True
+    return False
+
+
 async def _check_with_curl(
     username: str,
     platform: dict,
     semaphore: asyncio.Semaphore,
 ) -> dict | None:
+    if not is_plausible_username(username):
+        return None
     url = str(platform.get("url") or "").format(username=username)
     async with semaphore:
         try:
@@ -112,11 +131,14 @@ async def _check_with_curl(
                 title = _extract_title(html)
                 if not _is_hit(title, username, platform):
                     return None
+                final_url = str(getattr(resp, "url", url) or url)
+                if not _has_username_signal(username, title, html):
+                    return None
 
                 return {
                     "platform": platform.get("name"),
                     "username": username,
-                    "url": url,
+                    "url": final_url,
                     "title": title,
                     "likely_exists": True,
                 }
@@ -130,6 +152,8 @@ async def _check_with_browser(
     browser: PlaywrightClient,
     semaphore: asyncio.Semaphore,
 ) -> dict | None:
+    if not is_plausible_username(username):
+        return None
     url = str(platform.get("url") or "").format(username=username)
     async with semaphore:
         try:
@@ -146,16 +170,19 @@ async def _check_with_browser(
                 return None
 
             title = _extract_title(html)
+            final_url = str(result.get("final_url") or url)
 
             if not _is_hit(title, username, platform):
                 timed_out = bool(result.get("timed_out"))
                 if not (timed_out and _looks_like_profile_timeout_hit(url, username, html)):
                     return None
+            elif not _has_username_signal(username, title, html):
+                return None
 
             return {
                 "platform": platform.get("name"),
                 "username": username,
-                "url": url,
+                "url": final_url,
                 "title": title,
                 "likely_exists": True,
             }
@@ -168,7 +195,10 @@ async def probe_usernames(
     browser: PlaywrightClient,
     concurrency: int = 10,
 ) -> list[dict]:
-    if not usernames:
+    filtered_usernames = sorted(
+        {username.strip().lower() for username in usernames if is_plausible_username(username)}
+    )
+    if not filtered_usernames:
         return []
 
     try:
@@ -183,7 +213,7 @@ async def probe_usernames(
         # Phase 1: low-cost TLS impersonation probe across all platforms.
         phase1_tasks = [
             _check_with_curl(username, platform, semaphore)
-            for username in usernames
+            for username in filtered_usernames
             for platform in catalog
         ]
         phase1 = await asyncio.gather(*phase1_tasks, return_exceptions=True)
@@ -206,7 +236,7 @@ async def probe_usernames(
         ]
         browser_tasks = [
             _check_with_browser(username, platform, browser, semaphore)
-            for username in usernames
+            for username in filtered_usernames
             for platform in browser_only
         ]
         browser_results = await asyncio.gather(*browser_tasks, return_exceptions=True)
@@ -219,10 +249,10 @@ async def probe_usernames(
                 deduped[key] = row
 
         final_results = list(deduped.values())
-        total_probes = len(usernames) * len(catalog)
+        total_probes = len(filtered_usernames) * len(catalog)
         logger.info(
             "platform_probe_complete",
-            usernames=len(usernames),
+            usernames=len(filtered_usernames),
             total_probes=total_probes,
             hits=len(final_results),
         )

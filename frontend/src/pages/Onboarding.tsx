@@ -223,7 +223,6 @@ export default function Onboarding() {
                   whileHover={{ scale: input.trim() && !isLaunching ? 1.02 : 1, rotate: -0.5 }}
                   whileTap={{ scale: input.trim() && !isLaunching ? 0.98 : 1 }}
                   className="w-full py-5 hand-drawn-button text-2xl"
-                  style={{ opacity: !input.trim() || createScanMutation.isPending ? 0.5 : 1 }}
                   data-reaper-expression="happy"
                   data-reaper-phrases="Initiate the hunt.||Release the Sleuth Agent!||Let's burn their data logs.||No mercy for brokers."
                   style={{ opacity: !input.trim() || isLaunching ? 0.5 : 1 }}

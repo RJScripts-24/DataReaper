@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from datareaper.api.errors import register_error_handlers
 from datareaper.api.router import api_router, v1_router
@@ -44,8 +45,16 @@ async def log_http_requests(request: Request, call_next):
             client_ip=client_ip,
             error=str(exc),
         )
+        error_response = JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error",
+                "request_id": request_id,
+            },
+        )
+        error_response.headers["X-Request-Id"] = request_id
         clear_logging_context()
-        raise
+        return error_response
 
     response.headers["X-Request-Id"] = request_id
     duration_ms = round((perf_counter() - started) * 1000, 2)

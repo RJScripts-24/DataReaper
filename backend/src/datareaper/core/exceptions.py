@@ -12,3 +12,7 @@ class InvalidSeedError(DataReaperError):
 
 class LLMProviderError(DataReaperError):
     """Raised when an upstream LLM provider call fails."""
+
+
+class LLMRateLimitError(LLMProviderError):
+    """Raised when an upstream LLM provider is rate limited."""

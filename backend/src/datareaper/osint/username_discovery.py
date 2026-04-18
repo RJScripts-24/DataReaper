@@ -11,6 +11,72 @@ USERNAME_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+RESERVED_USERNAMES = {
+    "about",
+    "accessibility",
+    "ads",
+    "advertising",
+    "agreement",
+    "api",
+    "auth",
+    "blog",
+    "careers",
+    "community",
+    "contact",
+    "content-policy",
+    "copyright",
+    "docs",
+    "download",
+    "dpo",
+    "explore",
+    "features",
+    "global",
+    "help",
+    "home",
+    "jobs",
+    "legal",
+    "login",
+    "news",
+    "policies",
+    "policy",
+    "press",
+    "pricing",
+    "privacy",
+    "privacy-policies",
+    "privacy-policy",
+    "privacypolicies",
+    "privacypolicy",
+    "redditdatarequests",
+    "search",
+    "searchgithub",
+    "searchinggithub",
+    "security",
+    "service",
+    "signup",
+    "site-policy",
+    "status",
+    "support",
+    "terms",
+    "user-agreement",
+    "useragreement",
+    "ukrepresentative",
+}
+
+
+def is_plausible_username(value: str) -> bool:
+    username = str(value or "").strip().lower().lstrip("@")
+    if len(username) < 3:
+        return False
+    if not re.fullmatch(r"[a-z0-9_.-]{3,40}", username):
+        return False
+    if username in RESERVED_USERNAMES:
+        return False
+    if username.isdigit():
+        return False
+    if sum(ch.isalpha() for ch in username) < 2:
+        return False
+    return True
+
 
 def _seed_variants(seed: str) -> set[str]:
     normalized = seed.strip().lower()
@@ -47,7 +113,7 @@ def _seed_variants(seed: str) -> set[str]:
                 variants.add(f"{first}{last}{digits}")
                 variants.add(f"{last}{digits}")
 
-    return {item for item in variants if len(item) >= 3}
+    return {item for item in variants if is_plausible_username(item)}
 
 
 def _extract_from_accounts(accounts: Iterable[dict]) -> set[str]:
@@ -56,7 +122,9 @@ def _extract_from_accounts(accounts: Iterable[dict]) -> set[str]:
         url = str(account.get("url") or "")
         match = USERNAME_PATTERN.search(url)
         if match:
-            extracted.add(match.group(1).strip().lower())
+            username = match.group(1).strip().lower()
+            if is_plausible_username(username):
+                extracted.add(username)
     return extracted
 
 
@@ -70,7 +138,7 @@ async def discover_usernames(
     for seed in original_seeds or []:
         generated.update(_seed_variants(seed))
 
-    generated = {username for username in generated if username}
+    generated = {username for username in generated if is_plausible_username(username)}
     if not generated:
         return []
 
@@ -80,6 +148,6 @@ async def discover_usernames(
     profiles = await discover_profiles_via_sherlock(sorted(generated), browser)
     for profile in profiles:
         username = profile.get("username")
-        if username:
+        if username and is_plausible_username(str(username)):
             generated.add(str(username).strip().lower())
-    return sorted(generated)
+    return sorted(username for username in generated if is_plausible_username(username))

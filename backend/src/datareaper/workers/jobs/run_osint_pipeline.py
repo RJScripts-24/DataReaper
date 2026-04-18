@@ -402,12 +402,27 @@ async def run_osint_pipeline(ctx: dict, scan_id: str) -> dict:
 
         await session.refresh(scan, attribute_names=["status"])
         next_job_id = None
-        if queue is not None and not is_terminal_scan_status(scan.status):
+        material_progress = new_accounts + sites_found_in_cycle + len(profiles)
+        if queue is not None and material_progress > 0 and not is_terminal_scan_status(scan.status):
             next_job_id = await queue.enqueue_in(
                 "run_osint_pipeline",
                 delay_seconds=OSINT_REQUEUE_DELAY_SECONDS,
                 scan_id=scan_id,
             )
+        elif material_progress == 0:
+            scan.current_stage = "osint_complete"
+            scan.progress = max(scan.progress or 0, 45)
+            scan.status = "completed"
+            session.add(
+                ActivityEvent(
+                    id=new_id("evt"),
+                    scan_job_id=scan_id,
+                    event_type="System",
+                    message="OSINT pipeline completed with no new signal; auto-requeue skipped.",
+                    payload={"stage": "osint", "status": "completed", "cycle": cycle_number},
+                )
+            )
+            await session.commit()
 
         await publish(
             f"scan:{scan_id}",

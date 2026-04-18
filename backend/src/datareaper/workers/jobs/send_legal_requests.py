@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from datareaper.brokers.catalog import load_broker_catalog
 from datareaper.comms.outbound_dispatcher import dispatch_notice
+from datareaper.core.exceptions import LLMProviderError
 from datareaper.core.ids import new_id
 from datareaper.core.logging import get_logger
 from datareaper.db.models.activity_event import ActivityEvent
@@ -77,13 +78,27 @@ async def send_legal_requests(ctx: dict, scan_id: str) -> dict:
         recipient = _get_opt_out_email(case.broker_name)
         identity = {"name": None, "location": None}
         if llm is not None:
-            notice = await build_notice_with_llm(
-                case.jurisdiction,
-                seed_value,
-                identity,
-                case.broker_name,
-                llm,
-            )
+            try:
+                notice = await build_notice_with_llm(
+                    case.jurisdiction,
+                    seed_value,
+                    identity,
+                    case.broker_name,
+                    llm,
+                )
+            except LLMProviderError as exc:
+                logger.warning(
+                    "send_legal_requests_llm_fallback",
+                    scan_id=scan_id,
+                    broker_name=case.broker_name,
+                    error=str(exc),
+                )
+                notice = build_notice(
+                    case.jurisdiction,
+                    seed_value,
+                    identity,
+                    case.broker_name,
+                )
         else:
             notice = build_notice(
                 case.jurisdiction,

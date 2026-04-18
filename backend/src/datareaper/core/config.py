@@ -7,9 +7,12 @@ from typing import Literal
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BACKEND_ROOT = Path(__file__).resolve().parents[3]
+ENV_FILE = BACKEND_ROOT / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = "DataReaper Backend"
     app_env: Literal["development", "test", "production"] = "development"

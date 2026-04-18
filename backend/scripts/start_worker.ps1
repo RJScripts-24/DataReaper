@@ -10,11 +10,15 @@ $env:APP_AUTO_CREATE_TABLES = "false"
 Set-Location $backendDir
 
 
-$uvCommand = Get-Command uv -ErrorAction SilentlyContinue
+$enableUvRun = $env:DR_ENABLE_UV_RUN -eq "1"
+$uvCommand = $null
+if ($enableUvRun) {
+	$uvCommand = Get-Command uv -ErrorAction SilentlyContinue
+}
 $uvLockPath = Join-Path $backendDir "uv.lock"
-$useUv = $true
+$useUv = $enableUvRun
 
-if (Test-Path $uvLockPath) {
+if ($useUv -and (Test-Path $uvLockPath)) {
 	$uvLockFirstLine = Get-Content $uvLockPath -TotalCount 1 -ErrorAction SilentlyContinue
 	if ($uvLockFirstLine -like "# Placeholder lockfile*") {
 		$useUv = $false
