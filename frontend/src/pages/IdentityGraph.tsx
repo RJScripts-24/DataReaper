@@ -65,6 +65,7 @@ type RingPlacementCandidate = {
   footprint: number;
   clusterKey: string;
   primaryParentId: string | null;
+  branchRootId: string | null;
 };
 
 type RingPlacementCluster = {
@@ -101,7 +102,13 @@ type NodeLayoutConstraint = {
   preferredRadius: number;
   footprint: number;
   parentId: string | null;
+  branchRootId: string | null;
   level: number;
+};
+
+type PreparedGraphData = {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
 };
 
 const RING_RADIUS_BY_TYPE: Record<Exclude<GraphNode["type"], "seed">, number> = {
@@ -136,13 +143,364 @@ const EDGE_ORBIT_PADDING = 84;
 const EDGE_TANGENT_LIFT = 22;
 const EDGE_RADIAL_EXIT = 20;
 const FULL_TURN = Math.PI * 2;
+const GENERIC_NOISE_LABELS = new Set([
+  "unknown",
+  "undefined",
+  "null",
+  "none",
+  "n/a",
+  "na",
+  "https",
+  "http",
+  "www",
+  "browser",
+  "have browser",
+  "another",
+  "overview",
+]);
+const PLATFORM_EQUIVALENTS = new Map([
+  ["x.com", "twitter"],
+  ["twitter.com", "twitter"],
+  ["instagram.com", "instagram"],
+  ["github.com", "github"],
+  ["telegram.org", "telegram"],
+  ["t.me", "telegram"],
+  ["mastodon.social", "mastodon"],
+  ["linkedin.com", "linkedin"],
+  ["leetcode.com", "leetcode"],
+  ["pinterest.com", "pinterest"],
+  ["huggingface.co", "huggingface"],
+  ["reddit.com", "reddit"],
+  ["threads.net", "threads"],
+]);
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(value, max));
 }
 
+function slugifyGraphText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/\s+/g, " ")
+    .replace(/[^\p{L}\p{N}._/\-:@ ]+/gu, "");
+}
+
 function looksLikeEmail(value: string | undefined) {
   return Boolean(value && /.+@.+\..+/.test(value.trim()));
+}
+
+function looksLikeUrlish(value: string | undefined) {
+  return Boolean(value && /^(https?:\/\/|www\.)/i.test(value.trim()));
+}
+
+function looksLikeHostname(value: string | undefined) {
+  return Boolean(value && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(value.trim()));
+}
+
+function looksLikeSemverish(value: string | undefined) {
+  return Boolean(value && /^\d+\.\d+\.\d+(?:[-+._a-z0-9]+)?$/i.test(value.trim()));
+}
+
+function extractHostname(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+    return url.hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return trimmed
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/.*$/, "")
+      .toLowerCase();
+  }
+}
+
+function canonicalizeGraphLabel(node: GraphNode) {
+  const raw = String(node.data?.value ?? node.label ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  if (looksLikeEmail(raw)) {
+    return raw.toLowerCase();
+  }
+
+  if (looksLikeUrlish(raw) || looksLikeHostname(raw)) {
+    const hostname = extractHostname(raw);
+    if (node.type === "platform") {
+      return PLATFORM_EQUIVALENTS.get(hostname) ?? hostname;
+    }
+    return hostname || slugifyGraphText(raw);
+  }
+
+  const slug = slugifyGraphText(raw);
+  if (node.type === "platform") {
+    return PLATFORM_EQUIVALENTS.get(slug) ?? slug;
+  }
+  return slug;
+}
+
+function getGraphNodeDisplayLabel(node: GraphNode) {
+  const canonical = canonicalizeGraphLabel(node);
+  if (!canonical) {
+    return node.label;
+  }
+
+  if (looksLikeEmail(canonical)) {
+    return canonical;
+  }
+
+  if (node.type === "platform") {
+    return canonical;
+  }
+
+  return node.label.trim() || canonical;
+}
+
+function isLowSignalGraphNode(node: GraphNode) {
+  const canonical = canonicalizeGraphLabel(node);
+  if (!canonical) {
+    return true;
+  }
+
+  if (node.type !== "seed" && GENERIC_NOISE_LABELS.has(canonical)) {
+    return true;
+  }
+
+  if (node.type !== "seed" && looksLikeSemverish(canonical)) {
+    return true;
+  }
+
+  if ((node.type === "username" || node.type === "identity") && (canonical === "https" || canonical === "http")) {
+    return true;
+  }
+
+  if ((node.type === "username" || node.type === "identity") && /\s{2,}/.test(node.label)) {
+    return true;
+  }
+
+  return false;
+}
+
+function getCanonicalNodeKey(node: GraphNode) {
+  const canonical = canonicalizeGraphLabel(node);
+  if (node.type === "seed") {
+    return `seed:${canonical || node.id}`;
+  }
+  return `${node.type}:${canonical || node.id}`;
+}
+
+function scoreGraphNode(node: GraphNode, degree: number) {
+  const canonical = canonicalizeGraphLabel(node);
+  let score = degree * 5;
+
+  if (node.type === "seed") {
+    score += 80;
+  }
+  if (node.data?.details?.length) {
+    score += Math.min(node.data.details.length, 4) * 3;
+  }
+  if (node.data?.platform) {
+    score += 4;
+  }
+  if (looksLikeEmail(canonical)) {
+    score += 16;
+  }
+  if (looksLikeHostname(canonical)) {
+    score += 8;
+  }
+  if (node.label === canonical) {
+    score += 3;
+  }
+  if (isLowSignalGraphNode(node)) {
+    score -= 40;
+  }
+
+  return score;
+}
+
+function mergeGraphNodeData(primary: GraphNode, incoming: GraphNode) {
+  const mergedDetails = Array.from(
+    new Set([...(primary.data?.details ?? []), ...(incoming.data?.details ?? [])].map((detail) => detail.trim()).filter(Boolean))
+  );
+
+  return {
+    ...primary,
+    label:
+      getGraphNodeDisplayLabel(primary).length >= getGraphNodeDisplayLabel(incoming).length
+        ? getGraphNodeDisplayLabel(primary)
+        : getGraphNodeDisplayLabel(incoming),
+    connections: Array.from(new Set([...primary.connections, ...incoming.connections])),
+    revealStep:
+      primary.revealStep == null
+        ? incoming.revealStep
+        : incoming.revealStep == null
+          ? primary.revealStep
+          : Math.min(primary.revealStep, incoming.revealStep),
+    data: {
+      ...incoming.data,
+      ...primary.data,
+      platform: primary.data?.platform ?? incoming.data?.platform,
+      value: primary.data?.value ?? incoming.data?.value ?? getGraphNodeDisplayLabel(primary),
+      status: primary.data?.status ?? incoming.data?.status,
+      details: mergedDetails.length > 0 ? mergedDetails : undefined,
+    },
+  };
+}
+
+function computeNodeDegrees(nodes: GraphNode[], edges: GraphEdge[]) {
+  const degreeMap = new Map<string, number>();
+  for (const node of nodes) {
+    degreeMap.set(node.id, new Set(node.connections).size);
+  }
+  for (const edge of edges) {
+    degreeMap.set(edge.fromNodeId, (degreeMap.get(edge.fromNodeId) ?? 0) + 1);
+    degreeMap.set(edge.toNodeId, (degreeMap.get(edge.toNodeId) ?? 0) + 1);
+  }
+  return degreeMap;
+}
+
+function prepareGraphData(nodes: GraphNode[], edges: GraphEdge[]): PreparedGraphData {
+  if (nodes.length === 0) {
+    return { nodes, edges };
+  }
+
+  const centerNode = getCenterGraphNode(nodes);
+  const degreeMap = computeNodeDegrees(nodes, edges);
+  const aliasById = new Map<string, string>();
+  const dedupedByKey = new Map<string, GraphNode>();
+  const survivorScoreById = new Map<string, number>();
+
+  for (const node of nodes) {
+    if (node.id !== centerNode?.id && isLowSignalGraphNode(node) && (degreeMap.get(node.id) ?? 0) <= 1) {
+      continue;
+    }
+
+    const cleanedNode: GraphNode = {
+      ...node,
+      label: getGraphNodeDisplayLabel(node),
+      data: {
+        ...node.data,
+        value: node.data?.value ?? getGraphNodeDisplayLabel(node),
+      },
+    };
+
+    const canonicalKey = getCanonicalNodeKey(cleanedNode);
+    const existing = dedupedByKey.get(canonicalKey);
+    const nodeScore = scoreGraphNode(cleanedNode, degreeMap.get(node.id) ?? 0);
+
+    if (!existing) {
+      dedupedByKey.set(canonicalKey, cleanedNode);
+      aliasById.set(node.id, cleanedNode.id);
+      survivorScoreById.set(cleanedNode.id, nodeScore);
+      continue;
+    }
+
+    const existingScore = survivorScoreById.get(existing.id) ?? scoreGraphNode(existing, degreeMap.get(existing.id) ?? 0);
+    if (nodeScore > existingScore) {
+      const merged = mergeGraphNodeData(cleanedNode, existing);
+      dedupedByKey.set(canonicalKey, merged);
+      survivorScoreById.delete(existing.id);
+      survivorScoreById.set(merged.id, nodeScore);
+      aliasById.set(existing.id, merged.id);
+      aliasById.set(node.id, merged.id);
+    } else {
+      dedupedByKey.set(canonicalKey, mergeGraphNodeData(existing, cleanedNode));
+      aliasById.set(node.id, existing.id);
+    }
+  }
+
+  const dedupedNodes = Array.from(dedupedByKey.values());
+  const survivingIds = new Set(dedupedNodes.map((node) => node.id));
+  const adjacency = new Map<string, Set<string>>();
+  for (const node of dedupedNodes) {
+    adjacency.set(node.id, new Set());
+  }
+
+  const pushEdge = (fromId: string, toId: string) => {
+    if (!survivingIds.has(fromId) || !survivingIds.has(toId) || fromId === toId) {
+      return;
+    }
+    adjacency.get(fromId)?.add(toId);
+    adjacency.get(toId)?.add(fromId);
+  };
+
+  for (const node of nodes) {
+    const fromId = aliasById.get(node.id);
+    if (!fromId) {
+      continue;
+    }
+    for (const connectionId of node.connections) {
+      const toId = aliasById.get(connectionId);
+      if (!toId) {
+        continue;
+      }
+      pushEdge(fromId, toId);
+    }
+  }
+
+  for (const edge of edges) {
+    const fromId = aliasById.get(edge.fromNodeId);
+    const toId = aliasById.get(edge.toNodeId);
+    if (!fromId || !toId) {
+      continue;
+    }
+    pushEdge(fromId, toId);
+  }
+
+  const reachable = new Set<string>();
+  const startId = aliasById.get(centerNode?.id ?? "") ?? centerNode?.id ?? dedupedNodes[0]?.id;
+  if (startId) {
+    const queue = [startId];
+    reachable.add(startId);
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (!currentId) {
+        continue;
+      }
+      for (const nextId of adjacency.get(currentId) ?? []) {
+        if (reachable.has(nextId)) {
+          continue;
+        }
+        reachable.add(nextId);
+        queue.push(nextId);
+      }
+    }
+  }
+
+  const filteredNodes = dedupedNodes.filter((node) => reachable.has(node.id));
+  const filteredIds = new Set(filteredNodes.map((node) => node.id));
+  const filteredEdges: GraphEdge[] = [];
+  const seenEdgeKeys = new Set<string>();
+
+  filteredNodes.forEach((node) => {
+    node.connections = Array.from(adjacency.get(node.id) ?? []).filter((connectionId) => filteredIds.has(connectionId));
+  });
+
+  for (const node of filteredNodes) {
+    for (const connectionId of node.connections) {
+      const key = `${node.id}::${connectionId}`;
+      if (seenEdgeKeys.has(key)) {
+        continue;
+      }
+      seenEdgeKeys.add(key);
+      filteredEdges.push({
+        fromNodeId: node.id,
+        toNodeId: connectionId,
+      });
+    }
+  }
+
+  return {
+    nodes: filteredNodes,
+    edges: filteredEdges,
+  };
 }
 
 function getCenterGraphNode(nodes: GraphNode[]) {
@@ -821,6 +1179,9 @@ function buildSmartNodeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphLayo
   const positionedAngles = new Map<string, number>();
   const constraints = new Map<string, NodeLayoutConstraint>();
   const adjacency = new Map<string, Set<string>>();
+  const branchRootByNodeId = new Map<string, string>();
+  const branchAngleByRootId = new Map<string, number>();
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   for (const node of nodes) {
     adjacency.set(node.id, new Set(node.connections));
@@ -920,16 +1281,47 @@ function buildSmartNodeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphLayo
       const primaryAnchor =
         (nonSeedAnchors.length > 0 ? nonSeedAnchors[0] : lowerLevelConnections.find((connection) => connection.type !== "seed")) ??
         (type === "platform" ? null : lowerLevelConnections[0] ?? null);
+      const branchVotes = (nonSeedAnchors.length > 0 ? nonSeedAnchors : preferredAnchors)
+        .map((connection) => branchRootByNodeId.get(connection.id) ?? (connection.type === "platform" ? connection.id : null))
+        .filter((value): value is string => Boolean(value));
+      const branchCounts = new Map<string, number>();
+      branchVotes.forEach((value) => branchCounts.set(value, (branchCounts.get(value) ?? 0) + 1));
+      const branchRootId =
+        type === "platform"
+          ? node.id
+          : Array.from(branchCounts.entries()).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ??
+            null;
+      const branchAnchorAngle = branchRootId ? branchAngleByRootId.get(branchRootId) ?? null : null;
       const directAnchorAngles = (nonSeedAnchors.length > 0 ? nonSeedAnchors : preferredAnchors).map((connection) => connection.angle);
+      const localAngle = averageAngle(directAnchorAngles);
+      const branchSpread =
+        type === "platform"
+          ? Math.PI
+          : type === "username"
+            ? 0.46
+            : type === "identity"
+              ? 0.34
+              : 0.28;
       const preferredAngle =
-        averageAngle(directAnchorAngles) ??
-        (-Math.PI / 2 + (RING_ANGLE_OFFSET[type] ?? 0) + index * angleStep);
+        type === "platform"
+          ? normalizeAngle(-Math.PI / 2 + (RING_ANGLE_OFFSET[type] ?? 0) + index * angleStep)
+          : branchAnchorAngle != null
+            ? normalizeAngle(
+                branchAnchorAngle +
+                  clamp(
+                    localAngle != null ? getRelativeAngle(localAngle, branchAnchorAngle) : 0,
+                    -branchSpread,
+                    branchSpread
+                  )
+              )
+            : localAngle ?? (-Math.PI / 2 + (RING_ANGLE_OFFSET[type] ?? 0) + index * angleStep);
       return {
         node,
         preferredAngle,
         footprint: getNodeFootprint(node.type, node.label) + RING_PADDING_BY_TYPE[type],
-        clusterKey: primaryAnchor?.id ?? `solo:${node.id}`,
+        clusterKey: branchRootId ? `branch:${branchRootId}` : primaryAnchor?.id ?? `solo:${node.id}`,
         primaryParentId: primaryAnchor?.id ?? null,
+        branchRootId,
         anchorLevel: primaryAnchor?.level ?? -1,
         componentId: sameLevelComponentByNodeId.get(node.id) ?? `${type}-component-fallback-${index}`,
       };
@@ -967,8 +1359,9 @@ function buildSmartNodeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphLayo
         node: candidate.node,
         preferredAngle: sharedAngle,
         footprint: candidate.footprint,
-        clusterKey: sharedParentId ? `parent:${sharedParentId}` : `component:${candidate.componentId}`,
+        clusterKey: candidate.branchRootId ? `branch:${candidate.branchRootId}` : sharedParentId ? `parent:${sharedParentId}` : `component:${candidate.componentId}`,
         primaryParentId: sharedParentId,
+        branchRootId: candidate.branchRootId,
       };
     });
 
@@ -1014,9 +1407,17 @@ function buildSmartNodeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphLayo
           preferredRadius: nodeRadius,
           footprint: candidate.footprint,
           parentId: candidate.primaryParentId,
+          branchRootId: candidate.branchRootId,
           level,
         });
         positionedAngles.set(candidate.node.id, angle);
+        if (candidate.branchRootId) {
+          branchRootByNodeId.set(candidate.node.id, candidate.branchRootId);
+        }
+        if (type === "platform") {
+          branchRootByNodeId.set(candidate.node.id, candidate.node.id);
+          branchAngleByRootId.set(candidate.node.id, angle);
+        }
       });
     });
 
@@ -1265,8 +1666,9 @@ export default function IdentityGraph() {
   const graphNodes = (graphQuery.data?.nodes ?? []) as GraphNode[];
   const graphEdges = (graphQuery.data?.edges ?? []) as GraphEdge[];
   const selectedNodeQuery = useIdentityGraphNodeQuery(scanId, selectedNodeId);
-  const resolvedEdges = useMemo(() => buildResolvedEdges(graphNodes, graphEdges), [graphEdges, graphNodes]);
-  const graphLayout = useMemo(() => buildSmartNodeLayout(graphNodes, resolvedEdges), [graphNodes, resolvedEdges]);
+  const preparedGraph = useMemo(() => prepareGraphData(graphNodes, graphEdges), [graphEdges, graphNodes]);
+  const resolvedEdges = useMemo(() => buildResolvedEdges(preparedGraph.nodes, preparedGraph.edges), [preparedGraph.edges, preparedGraph.nodes]);
+  const graphLayout = useMemo(() => buildSmartNodeLayout(preparedGraph.nodes, resolvedEdges), [preparedGraph.nodes, resolvedEdges]);
   const routedEdges = useMemo(() => buildRoutedEdges(graphLayout.nodes, resolvedEdges), [graphLayout.nodes, resolvedEdges]);
 
   useEffect(() => {
