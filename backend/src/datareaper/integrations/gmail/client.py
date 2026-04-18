@@ -24,6 +24,47 @@ class GmailAPIClient:
 		self._service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 		self._sender = settings.gmail_sender_email
 
+	def _execute_send(
+		self,
+		payload: dict,
+		to: str,
+		subject: str,
+		thread_id: str | None,
+		in_reply_to_message_id: str | None,
+	) -> dict:
+		try:
+			return (
+				self._service.users()
+				.messages()
+				.send(userId="me", body=payload)
+				.execute()
+			)
+		except HttpError as exc:
+			message = str(exc)
+			if thread_id and "Invalid thread_id value" in message:
+				logger.warning(
+					"gmail_send_invalid_thread_id_retrying_without_thread",
+					to=to,
+					subject=subject,
+					thread_id=thread_id,
+				)
+				fallback_payload = {"raw": payload["raw"]}
+				if in_reply_to_message_id:
+					logger.warning(
+						"gmail_send_retrying_with_reply_headers_only",
+						to=to,
+						subject=subject,
+						thread_id=thread_id,
+						in_reply_to_message_id=in_reply_to_message_id,
+					)
+				return (
+					self._service.users()
+					.messages()
+					.send(userId="me", body=fallback_payload)
+					.execute()
+				)
+			raise
+
 	def send_message(
 		self,
 		to: str,
@@ -45,11 +86,12 @@ class GmailAPIClient:
 		if thread_id:
 			payload["threadId"] = thread_id
 
-		result = (
-			self._service.users()
-			.messages()
-			.send(userId="me", body=payload)
-			.execute()
+		result = self._execute_send(
+			payload=payload,
+			to=to,
+			subject=subject,
+			thread_id=thread_id,
+			in_reply_to_message_id=in_reply_to_message_id,
 		)
 		return {
 			"message_id": result.get("id"),
@@ -131,6 +173,7 @@ class GmailAPIClient:
 				{
 					"message_id": message.get("id"),
 					"thread_id": message.get("threadId"),
+					"rfc_message_id": header_map.get("Message-Id") or header_map.get("Message-ID", ""),
 					"from": header_map.get("From", ""),
 					"subject": header_map.get("Subject", ""),
 					"date": header_map.get("Date", ""),

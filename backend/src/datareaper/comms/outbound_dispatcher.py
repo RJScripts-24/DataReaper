@@ -20,6 +20,7 @@ async def dispatch_notice(
     body: str,
     thread_id: str | None = None,
     in_reply_to_message_id: str | None = None,
+    last_activity_label: str = "Notice dispatched",
 ) -> dict:
     """Send legal notice email and persist outbound thread/message metadata."""
     gmail = get_gmail_client()
@@ -55,28 +56,27 @@ async def dispatch_notice(
         thread.subject = subject or thread.subject
         thread.status = "sent"
 
-    session.add(
-        EmailMessage(
-            id=new_id("msg"),
-            thread_id=thread.id,
-            direction="agent",
-            body=body,
-            sender=None,
-            metadata_json={
-                "gmail_message_id": message_id,
-                "gmail_thread_id": gmail_thread_id,
-                "to_email": to_email,
-                "in_reply_to_message_id": in_reply_to_message_id,
-                "subject": subject,
-            },
-            display_timestamp=datetime.now(UTC).isoformat(),
-        )
+    outgoing_message = EmailMessage(
+        id=new_id("msg"),
+        thread_id=thread.id,
+        direction="agent",
+        body=body,
+        sender=None,
+        metadata_json={
+            "gmail_message_id": message_id,
+            "gmail_thread_id": gmail_thread_id,
+            "to_email": to_email,
+            "in_reply_to_message_id": in_reply_to_message_id,
+            "subject": subject,
+        },
+        display_timestamp=datetime.now(UTC).isoformat(),
     )
+    session.add(outgoing_message)
 
     case = await session.get(BrokerCase, broker_case_id)
     if case is not None:
         case.status = "in-progress"
-        case.last_activity_label = "Notice dispatched"
+        case.last_activity_label = last_activity_label
 
     await session.commit()
     increment_metric("emails_sent")
@@ -85,6 +85,8 @@ async def dispatch_notice(
         "message_id": message_id,
         "thread_id": gmail_thread_id,
         "local_thread_id": thread.id,
+        "local_message_id": outgoing_message.id,
+        "display_timestamp": outgoing_message.display_timestamp,
     }
 
 

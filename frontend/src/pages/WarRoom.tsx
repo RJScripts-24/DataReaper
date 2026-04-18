@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { PressureFilter } from "../components/PressureFilter";
 import { PressureText } from "../components/PressureText";
+import { AnimatedDataReaperLogo } from "../components/AnimatedDataReaperLogo";
 import {
   dataReaperQueryKeys,
   useCreateEngagementMessageMutation,
@@ -21,7 +22,6 @@ import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { useRealtimeSubscription, type RealtimeConnectionStatus } from "../lib/wsClient";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { type AgentEvent } from "../types/ws";
-import { ReaperCursor } from "../components/ReaperCursor";
 
 const COLORS = {
   bg: "#f5f3ef",
@@ -404,7 +404,7 @@ export default function WarRoom() {
       >
         <div className="w-full flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center">
           <div className="flex items-center justify-center md:justify-start gap-2 cursor-pointer" onClick={() => navigate("/")}> 
-            <img src="/images/logo.png" alt="DataReaper logo" style={{ width: "104px", height: "60px", objectFit: "contain" }} />
+            <AnimatedDataReaperLogo />
             <PressureText as="span" className="text-3xl tracking-tight" style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}>
               DataReaper
             </PressureText>
@@ -738,7 +738,6 @@ export default function WarRoom() {
           transform: none;
         }
       `}</style>
-      <ReaperCursor />
     </div>
   );
 }

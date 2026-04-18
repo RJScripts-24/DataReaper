@@ -7,10 +7,10 @@ import { toast } from "sonner";
 
 import { PressureFilter } from "../components/PressureFilter";
 import { PressureText } from "../components/PressureText";
+import { AnimatedDataReaperLogo } from "../components/AnimatedDataReaperLogo";
 import { stopScan } from "../lib/api";
 import { useScanContext, useRequireScan } from "../lib/scanContext";
 import { type RealtimeConnectionStatus } from "../lib/wsClient";
-import { ReaperCursor } from "../components/ReaperCursor";
 import { useDashboard } from "../lib/useDashboard";
 import { useScanStatusQuery } from "../lib/hooks";
 
@@ -31,6 +31,7 @@ const THREAT_COLORS: ThreatColorMap = {
   phone: COLORS.orange,
   location: COLORS.red,
 };
+const VISIBLE_THREAT_TYPES = ["email"] as const;
 
 function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   const chartData = useMemo(() => data.map((value) => ({ value })), [data]);
@@ -322,7 +323,7 @@ export default function CommandCenter() {
     return null;
   }
 
-  const radarTargets = state.radarTargets;
+  const radarTargets = state.radarTargets.filter((target) => target.type === "email");
   const activityLogs = state.activityFeed;
   const agents = state.agentStatuses;
 
@@ -340,23 +341,12 @@ export default function CommandCenter() {
     activeDisputes: [Math.max(0, state.disputeCount - 1), state.disputeCount],
   };
 
-  const threatTotal = Math.max(
-    1,
-    state.threatBreakdown.email + state.threatBreakdown.phone + state.threatBreakdown.location
-  );
+  const threatTotal = Math.max(1, state.threatBreakdown.email);
 
   const threatBreakdown = {
     email: {
       count: state.threatBreakdown.email,
       percentOfTotal: (state.threatBreakdown.email / threatTotal) * 100,
-    },
-    phone: {
-      count: state.threatBreakdown.phone,
-      percentOfTotal: (state.threatBreakdown.phone / threatTotal) * 100,
-    },
-    location: {
-      count: state.threatBreakdown.location,
-      percentOfTotal: (state.threatBreakdown.location / threatTotal) * 100,
     },
   };
 
@@ -514,11 +504,7 @@ export default function CommandCenter() {
       >
         <div className="max-w-[1600px] w-full mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}> 
-            <img
-              src="/images/logo.png"
-              alt="DataReaper logo"
-              style={{ width: "104px", height: "60px", objectFit: "contain", filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.15))" }}
-            />
+            <AnimatedDataReaperLogo imageStyle={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.15))" }} />
             <PressureText as="span" className="text-3xl tracking-tight" style={{ fontFamily: "'Dancing Script', cursive", fontWeight: 700 }}>
               DataReaper
             </PressureText>
@@ -700,7 +686,7 @@ export default function CommandCenter() {
               className="hand-drawn-card p-4" 
               style={{ backgroundColor: COLORS.card }}
               data-reaper-expression="happy"
-              data-reaper-phrases="Your digital trail is leaking everywhere. It's almost impressive.||Threat levels are elevated. Stay alert.||I've never seen so many location traces before!"
+              data-reaper-phrases="Your inbox footprint is bleeding into the open web.||Threat levels are elevated. Stay alert.||Email exposure is still the easiest thread to pull."
             >
               <PressureText as="h3" className="text-2xl mb-3" style={{ fontFamily: "'Caveat', cursive" }}>
                 Threat Intelligence
@@ -711,18 +697,6 @@ export default function CommandCenter() {
                   value={threatBreakdown.email?.count ?? 0}
                   percent={threatBreakdown.email?.percentOfTotal ?? 0}
                   color={COLORS.blue}
-                />
-                <ThreatItem
-                  label="Phone Leaks"
-                  value={threatBreakdown.phone?.count ?? 0}
-                  percent={threatBreakdown.phone?.percentOfTotal ?? 0}
-                  color={COLORS.orange}
-                />
-                <ThreatItem
-                  label="Location Traces"
-                  value={threatBreakdown.location?.count ?? 0}
-                  percent={threatBreakdown.location?.percentOfTotal ?? 0}
-                  color={COLORS.red}
                 />
               </div>
             </div>
@@ -777,7 +751,7 @@ export default function CommandCenter() {
                   </button>
                 </div>
                 <div className="flex items-center gap-3">
-                  {(["email", "phone", "location"] as const).map((type) => (
+                  {VISIBLE_THREAT_TYPES.map((type) => (
                     <div key={type} className="flex items-center gap-1">
                       <div className="w-2.5 h-2.5 rounded-full" style={{ background: THREAT_COLORS[type] }} />
                       <span className="text-xs capitalize" style={{ fontFamily: "'Patrick Hand', cursive", opacity: 0.75 }}>
@@ -915,7 +889,7 @@ export default function CommandCenter() {
                   Expanded Radar View
                 </PressureText>
                 <div className="flex items-center gap-4">
-                  {(["email", "phone", "location"] as const).map((type) => (
+                  {VISIBLE_THREAT_TYPES.map((type) => (
                     <div key={type} className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ background: THREAT_COLORS[type] }} />
                       <span className="text-sm capitalize" style={{ fontFamily: "'Patrick Hand', cursive" }}>
@@ -995,7 +969,6 @@ export default function CommandCenter() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
       `}</style>
-      <ReaperCursor />
     </div>
   );
 }

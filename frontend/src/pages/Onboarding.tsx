@@ -7,7 +7,6 @@ import { PressureFilter } from "../components/PressureFilter";
 import { ApiClientError } from "../lib/apiClient";
 import apiClient from "../lib/apiClient";
 import { useScanContext } from "../lib/scanContext";
-import { ReaperCursor } from "../components/ReaperCursor";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -105,59 +104,111 @@ export default function Onboarding() {
         </motion.div>
 
         {/* Illustrations are absolute, they don't affect flex flow */}
-        <div
+        <motion.div
           className="absolute left-[2vw] top-[20vh] hidden lg:block"
           data-reaper-expression="thinking"
           data-reaper-phrases="Sleuth Agent waiting for orders.||Look at that cute little scythe.||Recon phase incoming.||He's already sniffing for your data trail."
+          initial={{ opacity: 0, x: -20 }}
+          animate={{
+            opacity: 1,
+            x: 0,
+            y: [0, -10, 0],
+            rotate: [-0.4, 0.35, -0.4],
+          }}
+          transition={{
+            opacity: { duration: 0.9, delay: 0.35 },
+            x: { duration: 0.9, delay: 0.35 },
+            y: { duration: 8.8, repeat: Infinity, ease: "easeInOut" },
+            rotate: { duration: 10.5, repeat: Infinity, ease: "easeInOut" },
+          }}
+          style={{ transformOrigin: "50% 72%" }}
         >
+          <motion.div
+            aria-hidden="true"
+            className="absolute left-[12%] top-[10%] h-[72%] w-[70%] rounded-full"
+            style={{
+              background: "radial-gradient(circle, rgba(197, 227, 255, 0.18) 0%, rgba(197, 227, 255, 0.08) 35%, transparent 72%)",
+              filter: "blur(22px)",
+            }}
+            animate={{ opacity: [0.12, 0.22, 0.12], scale: [0.98, 1.04, 0.98] }}
+            transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut" }}
+          />
           <img
             src="/images/onboarding-sleuth-dome.png"
             alt="Sleuth Agent"
-            style={{ width: "480px", filter: "url(#pencil-sketch) contrast(1.15) brightness(1.05)", mixBlendMode: "multiply" }}
+            style={{ width: "398px", filter: "url(#pencil-sketch) contrast(1.15) brightness(1.05)", mixBlendMode: "multiply" }}
           />
-        </div>
+        </motion.div>
 
-        <div
+        <motion.div
           className="absolute right-[2vw] bottom-[15vh] hidden lg:block"
           data-reaper-expression="happy"
           data-reaper-phrases="The Security Shield. Nothing gets past us.||Your fortress in the digital wasteland.||Defense systems online.||Safe and sound under my watch."
+          initial={{ opacity: 0, x: 20 }}
+          animate={{
+            opacity: 1,
+            x: 0,
+            y: [0, 9, 0],
+            rotate: [0.35, -0.35, 0.35],
+          }}
+          transition={{
+            opacity: { duration: 0.9, delay: 0.45 },
+            x: { duration: 0.9, delay: 0.45 },
+            y: { duration: 9.6, repeat: Infinity, ease: "easeInOut" },
+            rotate: { duration: 11.4, repeat: Infinity, ease: "easeInOut" },
+          }}
+          style={{ transformOrigin: "50% 74%" }}
         >
+          <motion.div
+            aria-hidden="true"
+            className="absolute left-[14%] top-[12%] h-[68%] w-[68%] rounded-full"
+            style={{
+              background: "radial-gradient(circle, rgba(168, 165, 240, 0.18) 0%, rgba(168, 165, 240, 0.08) 36%, transparent 74%)",
+              filter: "blur(24px)",
+            }}
+            animate={{ opacity: [0.1, 0.19, 0.1], scale: [0.985, 1.035, 0.985] }}
+            transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
+          />
           <img
             src="/images/onboarding-shield-dome.png"
             alt="Security Shield"
-            style={{ width: "450px", filter: "url(#pencil-sketch) contrast(1.15) brightness(1.05)", mixBlendMode: "multiply" }}
+            style={{ width: "374px", filter: "url(#pencil-sketch) contrast(1.15) brightness(1.05)", mixBlendMode: "multiply" }}
           />
-        </div>
+        </motion.div>
 
         {/* Centered Form Container */}
         <div className="flex-grow flex flex-col items-center justify-center w-full max-w-[640px] px-6 relative z-10">
             <motion.div
               key="input-form"
               initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={{ opacity: 1, y: [0, -2, 0] }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.6 }}
+              transition={{
+                opacity: { duration: 0.6 },
+                y: { duration: 7.5, repeat: Infinity, ease: "easeInOut", delay: 1.2 },
+              }}
               className="hand-drawn-card p-10 relative overflow-hidden"
             >
+              <motion.div
+                aria-hidden="true"
+                className="pointer-events-none absolute -top-12 right-10 h-32 w-32 rounded-full"
+                style={{
+                  background: "radial-gradient(circle, rgba(168, 165, 240, 0.16) 0%, rgba(168, 165, 240, 0.06) 40%, transparent 75%)",
+                  filter: "blur(20px)",
+                }}
+                animate={{ opacity: [0.08, 0.18, 0.08], scale: [0.96, 1.06, 0.96] }}
+                transition={{ duration: 6.8, repeat: Infinity, ease: "easeInOut" }}
+              />
               <div className="relative z-10">
                 <PressureText as="h1" variant="strong" className="paper-text mb-4 leading-tight" style={{ fontFamily: "'Caveat', cursive", fontSize: "clamp(2.5rem, 5vw, 3.2rem)" }}>
                   Initialize Target Acquisition
                 </PressureText>
                 <PressureText as="p" variant="lite" className="paper-text mb-10 text-xl" style={{ fontFamily: "'Patrick Hand', cursive", opacity: 0.8 }}>
-                  Enter a single data point to begin the autonomous identity scan.
+                  Enter one email to begin the autonomous identity scan.
                 </PressureText>
 
                 <div className="mb-8 relative group">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <span
-                      className="text-sm uppercase tracking-[0.18em]"
-                      style={{
-                        fontFamily: "'Patrick Hand', cursive",
-                        color: "rgba(31, 31, 31, 0.72)",
-                      }}
-                    >
-                      Primary seed
-                    </span>
                     <span
                       className="text-sm"
                       style={{
@@ -165,11 +216,11 @@ export default function Onboarding() {
                         color: "rgba(31, 31, 31, 0.58)",
                       }}
                     >
-                      Use one email or one phone number
+                      Use one email only
                     </span>
                   </div>
                   <PressureInput
-                    type="text"
+                    type="email"
                     value={input}
                     disabled={isLaunching}
                     onChange={(e: any) => {
@@ -181,7 +232,7 @@ export default function Onboarding() {
                     onKeyDown={(e: any) => {
                       if (e.key === "Enter") handleInitialize();
                     }}
-                    placeholder="Email or Phone Number"
+                    placeholder="Email"
                     className="w-full bg-transparent border-none pb-4 text-[2rem] leading-tight outline-none"
                     style={{
                       color: "#1f1f1f",
@@ -360,7 +411,6 @@ export default function Onboarding() {
           }
         }
       `}</style>
-      <ReaperCursor />
     </div>
   );
 

@@ -121,6 +121,7 @@ async def sync_inbox_for_scan(scan_id: str, battle_repo: BattleRepository, llm) 
                 "type": "thread_update",
                 "scan_id": scan_id,
                 "thread_id": thread["thread_id"],
+                "gmail_thread_id": gmail_thread_id,
                 "intent": intent,
                 "body": body,
                 "broker_email": thread.get("broker_email"),
@@ -131,6 +132,8 @@ async def sync_inbox_for_scan(scan_id: str, battle_repo: BattleRepository, llm) 
                 "history": history[-10:],
                 "days_elapsed": int(thread.get("days_elapsed") or 0),
                 "evidence_url": thread.get("evidence_url"),
+                "gmail_message_id": message.get("message_id"),
+                "reply_to_message_id": message.get("rfc_message_id"),
             }
             await publish(WAR_ROOM_CHANNEL, event)
             updates.append(event)

@@ -47,12 +47,14 @@ export function FeaturesSection() {
   ];
 
   const techStack = [
-    { cat: "LLM Brain", tech: "Gemini Pro / Flash" },
-    { cat: "Orchestration", tech: "LangGraph / CrewAI (Python)" },
-    { cat: "Scraping", tech: "Playwright Headless Browsing" },
-    { cat: "OSINT", tech: "Holehe, Sherlock" },
-    { cat: "Comms", tech: "Gmail API (Polling)" },
-    { cat: "Frontend", tech: "React / Vite / TailwindCSS" }
+    { cat: "Backend API", tech: "FastAPI / Uvicorn / Pydantic" },
+    { cat: "Workers", tech: "ARQ / Redis / APScheduler" },
+    { cat: "Data Layer", tech: "SQLAlchemy / Postgres / Alembic" },
+    { cat: "OSINT", tech: "Maigret / Trafilatura / curl-cffi" },
+    { cat: "Automation", tech: "Playwright / SeleniumBase / BeautifulSoup" },
+    { cat: "Comms", tech: "Gmail API / Google OAuth" },
+    { cat: "LLM + Triage", tech: "Groq / structured legal templates" },
+    { cat: "Frontend", tech: "React / Vite / Tailwind CSS / TanStack Query" }
   ];
 
   return (
@@ -128,10 +130,10 @@ export function FeaturesSection() {
         >
           <div style={{ textAlign: "center", marginBottom: "40px" }}>
             <PressureText as="h2" variant="strong" className="paper-text" style={{ fontFamily: "'Dancing Script', cursive", fontSize: "3rem", marginBottom: "16px", display: "block" }}>
-              100% Free / Open-Source Stack
+              The Actual DataReaper Stack
             </PressureText>
             <PressureText as="p" variant="lite" className="paper-text" style={{ fontFamily: "'Caveat', cursive", fontSize: "20px", maxWidth: "600px", margin: "0 auto", opacity: 0.9 }}>
-              DataReaper relies exclusively on powerful open-source agents and bypasses expensive commercial APIs through headless browsing and OSINT mechanics.
+              DataReaper runs on a Python API, Redis-backed workers, OSINT collectors, browser automation, Gmail-based outreach, and a React command center with only a few targeted external APIs in the loop.
             </PressureText>
           </div>
 
